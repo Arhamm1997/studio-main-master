@@ -1,54 +1,64 @@
-// app/test-tracking/page.tsx - Fixed version
+// app/test-tracking/page.tsx - INSTANT LOADING TEST PAGE
 'use client';
 
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
-import { testEmailTracking, getTrackingStats } from '@/app/actions';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Badge } from '@/components/ui/badge';
+import { testEmailTracking, getTrackingStats, getContacts } from '@/app/actions';
+import { Loader2, Eye, Send, TestTube, CheckCircle2, XCircle, Trash2, RefreshCw, Activity } from 'lucide-react';
 
 export default function TrackingTestPage() {
   const [testResult, setTestResult] = useState<any>(null);
   const [stats, setStats] = useState<any>(null);
+  const [contacts, setContacts] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [isLoadingStats, setIsLoadingStats] = useState(false);
+  const [testContactId, setTestContactId] = useState('');
+  const [lastUpdated, setLastUpdated] = useState('Loading...');
+  const [dataLoaded, setDataLoaded] = useState(false);
 
-  const loadStats = async () => {
-    setIsLoadingStats(true);
+  const loadData = async () => {
     try {
-      const trackingStats = await getTrackingStats();
+      const [trackingStats, contactsList] = await Promise.all([
+        getTrackingStats(),
+        getContacts()
+      ]);
       setStats(trackingStats);
+      setContacts(contactsList);
+      setLastUpdated(new Date().toLocaleString());
+      setDataLoaded(true);
     } catch (error) {
-      console.error('Error loading stats:', error);
-      setStats({
-        totalSent: 0,
-        totalOpened: 0,
-        openRate: 0,
-        recentOpens: 0,
-        last24Hours: []
-      });
-    } finally {
-      setIsLoadingStats(false);
+      console.error('Error loading data:', error);
+      setDataLoaded(true); // Still mark as loaded even if error
     }
   };
 
+  // Load data immediately on mount
   useEffect(() => {
-    loadStats();
+    loadData();
+    
+    // Auto-refresh every 5 seconds
+    const interval = setInterval(loadData, 5000);
+    return () => clearInterval(interval);
   }, []);
 
-  const runTest = async () => {
+  const runTrackingTest = async () => {
     setIsLoading(true);
-    setTestResult(null);
     try {
       const result = await testEmailTracking();
-      setTestResult(result);
-      // Reload stats after test
-      if (result.success) {
-        setTimeout(() => loadStats(), 1000);
-      }
-    } catch (error: any) {
+      setTestResult({
+        ...result,
+        timestamp: new Date().toLocaleString()
+      });
+      // Reload data after test
+      setTimeout(() => loadData(), 1000);
+    } catch (error) {
       setTestResult({
         success: false,
-        message: `Error: ${error.message || 'Unknown error'}`
+        message: `Error: ${error.message}`,
+        timestamp: new Date().toLocaleString()
       });
     } finally {
       setIsLoading(false);
@@ -56,145 +66,160 @@ export default function TrackingTestPage() {
   };
 
   const testTrackingEndpoint = async () => {
-    setIsLoading(true);
     try {
-      // Test the tracking endpoint directly
-      const response = await fetch('/api/track/test-123', {
-        method: 'GET',
-        cache: 'no-cache'
-      });
+      const contactId = testContactId || 'test-123';
+      console.log(`Testing tracking endpoint with contact ID: ${contactId}`);
       
-      if (response.ok) {
-        alert('✅ Tracking endpoint is working! Check the browser network tab to see the tracking pixel response.');
-      } else {
-        alert(`❌ Tracking endpoint failed with status: ${response.status}`);
-      }
-    } catch (error: any) {
-      alert('❌ Error: ' + error.message);
-    } finally {
-      setIsLoading(false);
+      // Create a test image element to trigger the tracking pixel
+      const img = new Image();
+      img.onload = () => {
+        console.log('✅ Tracking pixel loaded successfully');
+        setTestResult({
+          success: true,
+          message: `Tracking endpoint test successful for contact ${contactId}`,
+          timestamp: new Date().toLocaleString()
+        });
+        // Reload data after successful test
+        setTimeout(() => loadData(), 1000);
+      };
+      img.onerror = () => {
+        console.log('❌ Tracking pixel failed to load');
+        setTestResult({
+          success: false,
+          message: `Tracking endpoint test failed for contact ${contactId}`,
+          timestamp: new Date().toLocaleString()
+        });
+      };
+      
+      // Trigger the tracking pixel with cache busting
+      const timestamp = Date.now();
+      img.src = `/api/track/${contactId}?test=1&t=${timestamp}`;
+      
+    } catch (error) {
+      setTestResult({
+        success: false,
+        message: 'Error: ' + error.message,
+        timestamp: new Date().toLocaleString()
+      });
     }
   };
 
-  const testBackendConnection = async () => {
-    setIsLoading(true);
-    try {
-      const response = await fetch('http://localhost:9000/api/health');
-      const data = await response.json();
-      
-      if (response.ok) {
-        alert(`✅ Backend is working!\nStatus: ${data.status}\nEmail Service: ${data.emailService?.status || 'unknown'}`);
-      } else {
-        alert('❌ Backend health check failed');
-      }
-    } catch (error: any) {
-      alert('❌ Cannot connect to backend: ' + error.message);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  const sentContacts = contacts.filter(c => c.status === 'Sent' || c.status === 'Opened');
+  const openedContacts = contacts.filter(c => c.status === 'Opened');
 
   return (
-    <main className="flex flex-1 flex-col gap-4 p-4 md:gap-8 md:p-8">
-      <div className="flex items-center">
-        <h1 className="text-3xl font-bold tracking-tight">📧 Email Tracking Test</h1>
+    <div className="container mx-auto p-6 space-y-6">
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-bold">📧 Email Tracking Test & Debug</h1>
+        <Button onClick={loadData} variant="outline" disabled={!dataLoaded}>
+          <RefreshCw className={`w-4 h-4 mr-2 ${!dataLoaded ? 'animate-spin' : ''}`} />
+          {dataLoaded ? 'Refresh Now' : 'Loading...'}
+        </Button>
       </div>
       
-      {/* Current Stats */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Current Statistics</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {isLoadingStats ? (
-            <div className="text-center py-4">Loading stats...</div>
-          ) : stats ? (
-            <>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <div className="text-center">
-                  <p className="text-2xl font-bold text-blue-600">{stats.totalSent}</p>
-                  <p className="text-sm text-gray-600">Emails Sent</p>
-                </div>
-                <div className="text-center">
-                  <p className="text-2xl font-bold text-green-600">{stats.totalOpened}</p>
-                  <p className="text-sm text-gray-600">Emails Opened</p>
-                </div>
-                <div className="text-center">
-                  <p className="text-2xl font-bold text-purple-600">{stats.openRate}%</p>
-                  <p className="text-sm text-gray-600">Open Rate</p>
-                </div>
-                <div className="text-center">
-                  <p className="text-2xl font-bold text-orange-600">{stats.recentOpens}</p>
-                  <p className="text-sm text-gray-600">Opens (24h)</p>
-                </div>
-              </div>
-              
-              {stats.last24Hours && stats.last24Hours.length > 0 && (
-                <div className="mt-4">
-                  <h4 className="font-semibold mb-2">Recent Opens (Last 24h):</h4>
-                  <div className="max-h-32 overflow-y-auto space-y-1">
-                    {stats.last24Hours.slice(0, 5).map((open: any, index: number) => (
-                      <div key={index} className="text-sm p-2 bg-gray-50 rounded">
-                        <span className="font-medium">{open.email}</span>
-                        <span className="text-gray-500 ml-2">
-                          {open.openedAt ? new Date(open.openedAt).toLocaleString() : 'No timestamp'}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </>
-          ) : (
-            <div className="text-center py-4 text-gray-500">No stats available</div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Test Buttons */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Testing Tools</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="flex flex-wrap gap-4">
-            <Button 
-              onClick={runTest} 
-              disabled={isLoading}
-              className="min-w-[200px]"
-            >
-              {isLoading ? 'Testing...' : 'Test Email Open Simulation'}
-            </Button>
-            
-            <Button 
-              onClick={testTrackingEndpoint} 
-              disabled={isLoading}
-              variant="outline"
-              className="min-w-[200px]"
-            >
-              {isLoading ? 'Testing...' : 'Test Tracking Endpoint'}
-            </Button>
-            
-            <Button 
-              onClick={testBackendConnection} 
-              disabled={isLoading}
-              variant="outline"
-              className="min-w-[200px]"
-            >
-              {isLoading ? 'Testing...' : 'Test Backend Connection'}
-            </Button>
-            
-            <Button 
-              onClick={loadStats} 
-              disabled={isLoadingStats}
-              variant="outline"
-              className="min-w-[200px]"
-            >
-              {isLoadingStats ? 'Loading...' : 'Refresh Stats'}
-            </Button>
+      {/* Real-time Status Indicator */}
+      <Card className={`border-2 ${dataLoaded ? 'border-green-200 bg-green-50' : 'border-blue-200 bg-blue-50'}`}>
+        <CardContent className="pt-6">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <div className={`w-3 h-3 rounded-full ${dataLoaded ? 'bg-green-500 animate-pulse' : 'bg-blue-500 animate-spin'}`}></div>
+              <span className={`font-medium ${dataLoaded ? 'text-green-800' : 'text-blue-800'}`}>
+                {dataLoaded ? 'Real-time Tracking Active' : 'Loading Tracking Data...'}
+              </span>
+            </div>
+            <span className={`text-sm ${dataLoaded ? 'text-green-600' : 'text-blue-600'}`}>
+              Last updated: {lastUpdated}
+            </span>
           </div>
         </CardContent>
       </Card>
+      
+      {/* Quick Stats */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <Card>
+          <CardContent className="pt-6">
+            <div className="text-center">
+              <p className="text-2xl font-bold text-blue-600">{sentContacts.length}</p>
+              <p className="text-sm text-gray-600">Emails Sent</p>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-6">
+            <div className="text-center">
+              <p className="text-2xl font-bold text-green-600">{openedContacts.length}</p>
+              <p className="text-sm text-gray-600">Emails Opened</p>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-6">
+            <div className="text-center">
+              <p className="text-2xl font-bold text-purple-600">{stats?.openRate || 0}%</p>
+              <p className="text-sm text-gray-600">Open Rate</p>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-6">
+            <div className="text-center">
+              <p className="text-2xl font-bold text-orange-600">{stats?.recentOpens || 0}</p>
+              <p className="text-sm text-gray-600">Opens (24h)</p>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Test Controls */}
+      <div className="grid md:grid-cols-2 gap-6">
+        {/* Automatic Test */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <TestTube className="w-5 h-5" />
+              Automatic Test
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <p className="text-sm text-gray-600">
+              Automatically find a sent email and simulate opening it.
+            </p>
+            <Button onClick={runTrackingTest} disabled={isLoading} className="w-full">
+              {isLoading ? (
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              ) : (
+                <TestTube className="w-4 h-4 mr-2" />
+              )}
+              {isLoading ? 'Testing...' : 'Run Test'}
+            </Button>
+          </CardContent>
+        </Card>
+
+        {/* Manual Test */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Eye className="w-5 h-5" />
+              Manual Test
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div>
+              <Label htmlFor="testContactId">Contact ID</Label>
+              <Input
+                id="testContactId"
+                value={testContactId}
+                onChange={(e) => setTestContactId(e.target.value)}
+                placeholder="test-123"
+              />
+            </div>
+            <Button onClick={testTrackingEndpoint} variant="outline" className="w-full">
+              <Eye className="w-4 h-4 mr-2" />
+              Test Endpoint
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
 
       {/* Test Results */}
       {testResult && (
@@ -203,18 +228,24 @@ export default function TrackingTestPage() {
             <CardTitle>Test Results</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className={`p-4 rounded-md ${testResult.success ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200'}`}>
-              <p className={testResult.success ? 'text-green-800' : 'text-red-800'}>
-                {testResult.message}
-              </p>
-              {testResult.contactEmail && (
-                <p className="text-sm mt-2 text-gray-600">
-                  Contact: {testResult.contactEmail} (ID: {testResult.contactId})
+            <div className={`p-4 rounded-md border ${
+              testResult.success 
+                ? 'bg-green-50 border-green-200' 
+                : 'bg-red-50 border-red-200'
+            }`}>
+              <div className="flex items-center gap-2">
+                {testResult.success ? (
+                  <CheckCircle2 className="w-5 h-5 text-green-600" />
+                ) : (
+                  <XCircle className="w-5 h-5 text-red-600" />
+                )}
+                <p className={testResult.success ? 'text-green-800' : 'text-red-800'}>
+                  {testResult.message}
                 </p>
-              )}
-              {testResult.error && (
-                <p className="text-sm mt-2 text-red-600">
-                  Error Details: {testResult.error}
+              </div>
+              {testResult.timestamp && (
+                <p className="text-xs mt-1 text-gray-500">
+                  {testResult.timestamp}
                 </p>
               )}
             </div>
@@ -222,96 +253,80 @@ export default function TrackingTestPage() {
         </Card>
       )}
 
-      {/* Manual Test Instructions */}
+      {/* Contact Activity */}
       <Card>
         <CardHeader>
-          <CardTitle>Manual Testing Instructions</CardTitle>
+          <CardTitle className="flex items-center gap-2">
+            <Activity className="w-5 h-5" />
+            Recent Activity
+          </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="space-y-4 text-sm">
-            <div>
-              <h4 className="font-semibold mb-2">To manually test email tracking:</h4>
-              <ol className="list-decimal list-inside space-y-1 ml-4">
-                <li>Go to the Dashboard and send a test email to yourself</li>
-                <li>Open the email in your email client (Gmail, Outlook, etc.)</li>
-                <li>Make sure to "Show images" in your email</li>
-                <li>Wait a few seconds for the tracking pixel to load</li>
-                <li>Come back here and click "Refresh Stats"</li>
-                <li>Check the dashboard - the status should change to "Opened"</li>
-              </ol>
+          {!dataLoaded ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="w-6 h-6 animate-spin mr-2" />
+              <span>Loading contacts...</span>
             </div>
-            
-            <div className="p-4 bg-blue-50 border border-blue-200 rounded-md">
-              <h4 className="font-semibold text-blue-800 mb-2">Important Notes:</h4>
-              <ul className="text-blue-800 space-y-1">
-                <li>• Some email clients block images by default</li>
-                <li>• Make sure to "Show images" to trigger the tracking pixel</li>
-                <li>• The tracking URL format is: <code className="bg-white px-1 rounded">/api/track/[contactId]</code></li>
-                <li>• Check the browser Network tab to see tracking requests</li>
-              </ul>
+          ) : contacts.length === 0 ? (
+            <p className="text-gray-500 text-center py-8">No contacts found</p>
+          ) : (
+            <div className="space-y-2 max-h-64 overflow-y-auto">
+              {contacts
+                .filter(c => c.status === 'Sent' || c.status === 'Opened')
+                .sort((a, b) => {
+                  const aTime = a.openTimestamp || a.sentTimestamp || '';
+                  const bTime = b.openTimestamp || b.sentTimestamp || '';
+                  return new Date(bTime).getTime() - new Date(aTime).getTime();
+                })
+                .slice(0, 10)
+                .map(contact => (
+                  <div key={contact.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                    <div>
+                      <p className="font-medium">{contact.firstName} {contact.lastName}</p>
+                      <p className="text-sm text-gray-600">{contact.email}</p>
+                    </div>
+                    <div className="text-right">
+                      <Badge variant={contact.status === 'Opened' ? 'default' : 'secondary'}>
+                        {contact.status === 'Opened' ? (
+                          <Eye className="w-3 h-3 mr-1" />
+                        ) : (
+                          <Send className="w-3 h-3 mr-1" />
+                        )}
+                        {contact.status}
+                      </Badge>
+                      {contact.openTimestamp && (
+                        <p className="text-xs text-green-600 mt-1">
+                          {new Date(contact.openTimestamp).toLocaleString()}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                ))}
             </div>
+          )}
+        </CardContent>
+      </Card>
 
-            <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-md">
-              <h4 className="font-semibold text-yellow-800 mb-2">Troubleshooting:</h4>
-              <ul className="text-yellow-800 space-y-1">
-                <li>• If tracking doesn't work, check the backend is running on port 9000</li>
-                <li>• Make sure CORS is configured correctly</li>
-                <li>• Check browser console for any errors</li>
-                <li>• Test the tracking endpoint directly using the button above</li>
-              </ul>
+      {/* Debug Info */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Debug Info</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid md:grid-cols-2 gap-4 text-sm">
+            <div>
+              <p><strong>Page Status:</strong> ✅ Loaded</p>
+              <p><strong>Data Status:</strong> {dataLoaded ? '✅ Ready' : '⏳ Loading'}</p>
+              <p><strong>Contacts:</strong> {contacts.length}</p>
+            </div>
+            <div>
+              <p><strong>Sent:</strong> {sentContacts.length}</p>
+              <p><strong>Opened:</strong> {openedContacts.length}</p>
+              <p><strong>Auto-refresh:</strong> 5s</p>
             </div>
           </div>
         </CardContent>
       </Card>
-
-      {/* Tracking URL Examples */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Technical Details</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            <div>
-              <h4 className="font-semibold mb-2">Tracking URL Format:</h4>
-              <code className="text-xs bg-gray-100 p-2 rounded block">
-                {typeof window !== 'undefined' 
-                  ? `${window.location.origin}/api/track/[contactId]` 
-                  : 'http://localhost:9002/api/track/[contactId]'
-                }
-              </code>
-            </div>
-            
-            <div>
-              <h4 className="font-semibold mb-2">Test URLs:</h4>
-              <div className="space-y-1">
-                <div>
-                  <span className="text-sm font-medium">Frontend Tracking: </span>
-                  <code className="text-xs bg-gray-100 p-1 rounded">
-                    {typeof window !== 'undefined' 
-                      ? `${window.location.origin}/api/track/test-123` 
-                      : 'http://localhost:9002/api/track/test-123'
-                    }
-                  </code>
-                </div>
-                <div>
-                  <span className="text-sm font-medium">Backend Health: </span>
-                  <code className="text-xs bg-gray-100 p-1 rounded">
-                    http://localhost:9000/api/health
-                  </code>
-                </div>
-              </div>
-            </div>
-            
-            <div>
-              <h4 className="font-semibold mb-2">Expected Response:</h4>
-              <p className="text-sm text-gray-600">
-                The tracking endpoint should return a 1x1 transparent PNG image with appropriate headers.
-                Check the Network tab in your browser to see the actual response.
-              </p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-    </main>
+    </div>
   );
 }
