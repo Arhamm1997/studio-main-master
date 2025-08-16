@@ -1,4 +1,4 @@
-// backend/server.js - Fixed with correct nodemailer API and better error handling
+// backend/server.js - Fixed with correct nodemailer API
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
@@ -14,7 +14,7 @@ app.use(cors({
   origin: [
     'http://localhost:9002', 
     'http://localhost:3000',
-    'http://localhost:9000',  // In case frontend is on same port
+    'http://localhost:9000',
     'http://127.0.0.1:9002',
     'http://127.0.0.1:3000'
   ],
@@ -46,7 +46,6 @@ async function initEmailService() {
     try {
       nodemailer = require('nodemailer');
       console.log('✅ Nodemailer loaded successfully');
-      console.log('📋 Nodemailer version:', nodemailer.version || 'unknown');
       
     } catch (requireError) {
       console.error('❌ Failed to load nodemailer:', requireError.message);
@@ -69,7 +68,7 @@ async function initEmailService() {
     
     console.log('🔧 Creating email transporter...');
     
-    // Create transporter with detailed config
+    // Create transporter with detailed config - FIXED: using createTransport not createTransporter
     const transporterConfig = {
       host: process.env.SMTP_HOST,
       port: parseInt(process.env.SMTP_PORT) || 465,
@@ -91,8 +90,8 @@ async function initEmailService() {
       passLength: transporterConfig.auth.pass ? transporterConfig.auth.pass.length : 0
     });
     
-    // Create transporter
-    emailService = nodemailer.createTransporter(transporterConfig);
+    // Create transporter - FIXED: correct method name
+    emailService = nodemailer.createTransport(transporterConfig);
     console.log('✅ Email transporter created successfully');
     
     // Verify connection synchronously
@@ -162,7 +161,7 @@ app.get('/api/health', async (req, res) => {
         transporterCreated: !!emailService,
         nodemailer: {
           loaded: !!nodemailer,
-          version: nodemailer?.version || 'unknown'
+          version: 'unknown'
         }
       },
       smtp: {
@@ -328,7 +327,6 @@ app.post('/api/test-email', async (req, res) => {
                 <li><strong>From:</strong> ${process.env.SMTP_FROM_EMAIL || process.env.SMTP_USER}</li>
                 <li><strong>To:</strong> ${testEmail}</li>
                 <li><strong>Test Time:</strong> ${new Date().toLocaleString()}</li>
-                <li><strong>Nodemailer Version:</strong> ${nodemailer?.version || 'unknown'}</li>
               </ul>
             </div>
             <p style="text-align: center; color: #888; font-size: 14px;">
@@ -481,7 +479,6 @@ app.get('/', (req, res) => {
     message: 'Bagga Bugs Email Backend',
     status: 'running',
     emailService: serviceStatus,
-    nodemailerVersion: nodemailer?.version || 'unknown',
     transporterCreated: !!emailService,
     endpoints: {
       health: '/api/health',

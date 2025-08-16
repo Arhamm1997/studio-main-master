@@ -1,8 +1,8 @@
 'use server';
 
 import { db, refreshDbFromStorage } from '@/lib/db';
-import { saveContacts, addEmailRecord, loadSettings, saveSettings } from '@/lib/storage';
-import type { Campaign, Contact, AppSettings } from '@/lib/types';
+import { saveContacts, addEmailRecord, loadSettings, saveSettings, loadEmailRecords, updateContact } from '@/lib/storage';
+import type { Campaign, Contact, AppSettings, EmailRecord } from '@/lib/types';
 import { revalidatePath } from 'next/cache';
 
 // Simulate network delay
@@ -28,6 +28,59 @@ export async function getContacts(): Promise<Contact[]> {
 export async function getSettings(): Promise<AppSettings> {
   await delay(200);
   return await loadSettings();
+}
+
+export async function getEmailRecords(): Promise<EmailRecord[]> {
+  await delay(200);
+  return await loadEmailRecords();
+}
+
+// NEW: Clean email records function
+export async function cleanEmailRecords() {
+  try {
+    await delay(500);
+    const { saveEmailRecords } = await import('@/lib/storage');
+    await saveEmailRecords([]);
+    revalidatePath('/');
+    console.log('🧹 Email records cleaned successfully');
+    return { success: true, message: "All email records cleared successfully!" };
+  } catch (error) {
+    console.error('❌ Error cleaning email records:', error);
+    return { success: false, message: "Failed to clean email records." };
+  }
+}
+
+// NEW: Get real-time dashboard data
+export async function getDashboardData() {
+  await delay(200);
+  await refreshDbFromStorage();
+  
+  const campaign = db.campaign;
+  const contacts = db.contacts;
+  const emailRecords = await loadEmailRecords();
+  
+  // Calculate analytics
+  const total = contacts.length;
+  const sent = contacts.filter(c => c.status === 'Sent' || c.status === 'Opened').length;
+  const pending = contacts.filter(c => c.status === 'Pending').length;
+  const errors = contacts.filter(c => c.status === 'Error').length;
+  const opened = contacts.filter(c => c.status === 'Opened').length;
+  const openRate = sent > 0 ? parseFloat(((opened / sent) * 100).toFixed(2)) : 0;
+  const sentRate = total > 0 ? parseFloat(((sent / total) * 100).toFixed(2)) : 0;
+  
+  const analytics = { total, sent, pending, errors, opened, openRate, sentRate };
+  
+  // Sort email records by most recent first
+  const sortedEmailRecords = emailRecords.sort((a, b) => 
+    new Date(b.sentAt).getTime() - new Date(a.sentAt).getTime()
+  );
+  
+  return {
+    campaign,
+    contacts,
+    analytics,
+    emailRecords: sortedEmailRecords
+  };
 }
 
 export async function getAnalytics() {
@@ -209,6 +262,28 @@ export async function testBackendConnection() {
   }
 }
 
+// IMPROVED EMAIL RECORD CREATION FUNCTION
+export async function createEmailRecord(contactId: string, contactEmail: string, contactName: string, subject: string, campaignData: any) {
+  try {
+    const emailRecord = await addEmailRecord({
+      contactId,
+      contactEmail,
+      contactName,
+      subject,
+      sentAt: new Date().toISOString(),
+      openedAt: null,
+      status: 'Sent',
+      campaignData
+    });
+    
+    console.log(`📧 Email record created for contact ${contactId}: ${emailRecord.id}`);
+    return emailRecord;
+  } catch (error) {
+    console.error(`❌ Failed to create email record for contact ${contactId}:`, error);
+    return null;
+  }
+}
+
 export async function sendCampaign() {
   console.log('🚀 Starting optimized email campaign...');
   await delay(500);
@@ -356,37 +431,48 @@ export async function sendCampaign() {
     const result = await response.json();
     console.log('✅ Bulk email response:', result);
 
-    // Update contact statuses based on results
+    // Update contact statuses and create email records
     let emailsSent = 0;
     let emailsFailed = 0;
+    let emailRecordsCreated = 0;
     const errors: string[] = [];
 
     if (result.results && Array.isArray(result.results)) {
-      result.results.forEach((emailResult: any) => {
+      for (const emailResult of result.results) {
         const contactEmail = emailResult.to;
         const contact = db.contacts.find(c => c.email === contactEmail);
         
         if (contact) {
           if (emailResult.success) {
+            // Update contact status
             contact.status = 'Sent';
             contact.sentTimestamp = new Date().toISOString();
             emailsSent++;
             
-            // Add email record (async, don't wait)
-            addEmailRecord({
-              contactId: contact.id,
-              contactEmail: contact.email,
-              contactName: `${contact.firstName} ${contact.lastName}`.trim(),
-              subject: emailsToSend.find(e => e.contactId === contact.id)?.subject || '',
-              sentAt: new Date().toISOString(),
-              openedAt: null,
-              status: 'Sent',
-              campaignData: {
-                subject: db.campaign.subject,
-                body: db.campaign.body,
-                senderName: settings.teamLeadName
+            // Create email record
+            const emailData = emailsToSend.find(e => e.contactId === contact.id);
+            if (emailData) {
+              try {
+                await addEmailRecord({
+                  contactId: contact.id,
+                  contactEmail: contact.email,
+                  contactName: `${contact.firstName} ${contact.lastName}`.trim(),
+                  subject: emailData.subject,
+                  sentAt: contact.sentTimestamp,
+                  openedAt: null,
+                  status: 'Sent',
+                  campaignData: {
+                    subject: db.campaign.subject,
+                    body: db.campaign.body,
+                    senderName: settings.teamLeadName
+                  }
+                });
+                emailRecordsCreated++;
+                console.log(`📧 Email record created for ${contact.email}`);
+              } catch (recordError) {
+                console.error(`❌ Failed to create email record for ${contact.email}:`, recordError);
               }
-            }).catch(console.error);
+            }
             
           } else {
             contact.status = 'Error';
@@ -394,7 +480,7 @@ export async function sendCampaign() {
             errors.push(`${contact.email}: ${emailResult.error || 'Unknown error'}`);
           }
         }
-      });
+      }
     }
 
     // Save all contact updates at once
@@ -402,10 +488,10 @@ export async function sendCampaign() {
     revalidatePath('/');
     
     const resultMessage = emailsFailed > 0 
-      ? `Campaign completed! ${emailsSent} emails sent successfully, ${emailsFailed} failed.`
-      : `Campaign sent successfully to ${emailsSent} recipients! 🎉`;
+      ? `Campaign completed! ${emailsSent} emails sent successfully, ${emailsFailed} failed. ${emailRecordsCreated} email records created.`
+      : `Campaign sent successfully to ${emailsSent} recipients! 🎉 ${emailRecordsCreated} email records created.`;
       
-    console.log(`📊 Campaign finished: ${emailsSent} sent, ${emailsFailed} failed`);
+    console.log(`📊 Campaign finished: ${emailsSent} sent, ${emailsFailed} failed, ${emailRecordsCreated} records created`);
     
     return { 
       success: emailsSent > 0, 
@@ -413,7 +499,8 @@ export async function sendCampaign() {
       stats: {
         sent: emailsSent,
         failed: emailsFailed,
-        total: pendingContacts.length
+        total: pendingContacts.length,
+        recordsCreated: emailRecordsCreated
       },
       errors: errors.length > 0 ? errors : undefined
     };
@@ -440,46 +527,46 @@ export async function sendCampaign() {
   }
 }
 
-// Update contact status when email is opened (IMPROVED VERSION)
+// IMPROVED EMAIL TRACKING FUNCTION
 export async function updateContactOpenStatus(contactId: string) {
   try {
     console.log(`📧 Tracking: Attempting to mark contact ${contactId} as opened`);
     
-    await refreshDbFromStorage();
-    const contact = db.contacts.find(c => c.id === contactId);
+    // Update contact in database
+    const updateSuccess = await updateContact(contactId, {
+      status: 'Opened',
+      openTimestamp: new Date().toISOString()
+    });
     
-    if (!contact) {
-      console.log(`⚠️ Contact with ID ${contactId} not found`);
-      return false;
-    }
-    
-    // Only update if email was sent and not already opened
-    if (contact.status === 'Sent') {
-      contact.status = 'Opened';
-      contact.openTimestamp = new Date().toISOString();
+    if (updateSuccess) {
+      // Also update in memory
+      await refreshDbFromStorage();
       
-      await saveContacts(db.contacts);
-      
-      // Add email record for tracking
-      await addEmailRecord({
-        contactId: contact.id,
-        contactEmail: contact.email,
-        contactName: `${contact.firstName} ${contact.lastName}`.trim(),
-        subject: '', // We don't have subject here, could store it separately
-        sentAt: contact.sentTimestamp || new Date().toISOString(),
-        openedAt: contact.openTimestamp,
-        status: 'Opened',
-        campaignData: null
-      }).catch(console.error);
+      // Find and update email record
+      try {
+        const emailRecords = await loadEmailRecords();
+        const emailRecord = emailRecords.find(r => r.contactId === contactId);
+        
+        if (emailRecord && !emailRecord.openedAt) {
+          emailRecord.openedAt = new Date().toISOString();
+          emailRecord.status = 'Opened';
+          
+          // Save updated email records
+          const { saveEmailRecords } = await import('@/lib/storage');
+          await saveEmailRecords(emailRecords);
+          
+          console.log(`📧 Email record updated for contact ${contactId}`);
+        }
+      } catch (recordError) {
+        console.error(`❌ Failed to update email record for contact ${contactId}:`, recordError);
+      }
       
       revalidatePath('/');
-      
-      console.log(`✅ Contact ${contactId} (${contact.email}) marked as opened at ${contact.openTimestamp}`);
+      console.log(`✅ Contact ${contactId} successfully marked as opened`);
       return true;
-    } else {
-      console.log(`ℹ️ Contact ${contactId} status is '${contact.status}', not updating`);
-      return false;
     }
+    
+    return false;
   } catch (error) {
     console.error(`❌ Error updating contact ${contactId} open status:`, error);
     return false;

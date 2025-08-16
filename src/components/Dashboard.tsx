@@ -1,6 +1,6 @@
 'use client';
 
-import type { Analytics, Campaign, Contact } from '@/lib/types';
+import type { Analytics, Campaign, Contact, EmailRecord } from '@/lib/types';
 import { useState, useTransition, useRef, useMemo, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 
@@ -14,10 +14,11 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Button } from "@/components/ui/button"; // Keep Button here if used outside sub-components
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 
-import { addContact, sendCampaign, updateCampaign, deleteContacts, cleanContacts, addContacts } from '@/app/actions';
-import { CircleUser, Mail, Users, BarChart, Send, PlusCircle, Loader2, Rocket, CheckCircle2, XCircle, Trash2, Sparkles, Upload } from 'lucide-react';
+import { addContact, sendCampaign, updateCampaign, deleteContacts, cleanContacts, addContacts, cleanEmailRecords } from '@/app/actions';
+import { CircleUser, Mail, Users, BarChart, Send, PlusCircle, Loader2, Rocket, CheckCircle2, XCircle, Trash2, Sparkles, Upload, Eye, Clock, Activity } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 
 function AnalyticsCard({ analytics }: { analytics: Analytics }) {
@@ -63,7 +64,6 @@ function AnalyticsCard({ analytics }: { analytics: Analytics }) {
         </Card>
     );
 }
-
 
 function AddContactDialog({ onAdd }: { onAdd: (contact: Omit<Contact, 'id'>) => void }) {
     const [isPending, startTransition] = useTransition();
@@ -183,7 +183,6 @@ function ContactsTable({
             const lastNameIndex = header.findIndex(h => h.toLowerCase() === 'lastname' || h.toLowerCase() === 'last name');
             
             if (emailIndex === -1) {
-                // You would use your toast hook here to show an error
                 console.error("CSV must have an 'email' column.");
                 return;
             }
@@ -202,7 +201,7 @@ function ContactsTable({
             });
         };
         reader.readAsText(file);
-        event.target.value = ''; // Reset file input
+        event.target.value = '';
     };
 
     const StatusPill = ({ status }: { status: Contact['status'] }) => {
@@ -210,10 +209,13 @@ function ContactsTable({
         if (status === 'Sent') {
             return <div className={`${baseClasses} bg-blue-100 text-blue-800`}><CheckCircle2 className="w-3 h-3" />Sent</div>;
         }
+        if (status === 'Opened') {
+            return <div className={`${baseClasses} bg-green-100 text-green-800`}><Eye className="w-3 h-3" />Opened</div>;
+        }
         if (status === 'Error') {
             return <div className={`${baseClasses} bg-red-100 text-red-800`}><XCircle className="w-3 h-3" />Error</div>;
         }
-        return <div className={`${baseClasses} bg-yellow-100 text-yellow-800`}><Loader2 className="w-3 h-3 animate-spin" />Pending</div>;
+        return <div className={`${baseClasses} bg-yellow-100 text-yellow-800`}><Clock className="w-3 h-3" />Pending</div>;
     };
     
     return (
@@ -274,6 +276,119 @@ function ContactsTable({
     );
 }
 
+// NEW EMAIL RECORDS TABLE COMPONENT WITH CLEAN OPTION
+function EmailRecordsTable({ emailRecords, onCleanRecords }: { 
+    emailRecords: EmailRecord[]; 
+    onCleanRecords: () => void;
+}) {
+    const [isClearing, setIsClearing] = useState(false);
+
+    const handleCleanRecords = async () => {
+        setIsClearing(true);
+        try {
+            await onCleanRecords();
+        } finally {
+            setIsClearing(false);
+        }
+    };
+
+    return (
+        <Card>
+            <CardHeader className="flex flex-row items-start justify-between">
+                <div>
+                    <CardTitle className="flex items-center gap-2">
+                        <Activity className="w-6 h-6" />
+                        Email Records
+                        {emailRecords.length > 0 && (
+                            <Badge className="ml-2 bg-primary/20 text-primary">
+                                {emailRecords.length}
+                            </Badge>
+                        )}
+                    </CardTitle>
+                    <CardDescription>
+                        Complete history of all sent emails and their status.
+                    </CardDescription>
+                </div>
+                {emailRecords.length > 0 && (
+                    <Button 
+                        variant="outline" 
+                        size="sm" 
+                        onClick={handleCleanRecords}
+                        disabled={isClearing}
+                        className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                    >
+                        {isClearing ? (
+                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        ) : (
+                            <Trash2 className="w-4 h-4 mr-2" />
+                        )}
+                        Clear All Records
+                    </Button>
+                )}
+            </CardHeader>
+            <CardContent>
+                <div className="border rounded-lg overflow-hidden">
+                    <Table>
+                        <TableHeader className="bg-secondary">
+                            <TableRow>
+                                <TableHead>Contact</TableHead>
+                                <TableHead>Email</TableHead>
+                                <TableHead>Subject</TableHead>
+                                <TableHead>Status</TableHead>
+                                <TableHead>Sent At</TableHead>
+                                <TableHead>Opened At</TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {emailRecords.length === 0 ? (
+                                <TableRow>
+                                    <TableCell colSpan={6} className="text-center h-24 text-muted-foreground">
+                                        No email records yet. Send a campaign to see records here!
+                                    </TableCell>
+                                </TableRow>
+                            ) : emailRecords.map(record => (
+                                <TableRow key={record.id}>
+                                    <TableCell className="font-medium">{record.contactName}</TableCell>
+                                    <TableCell className="text-muted-foreground">{record.contactEmail}</TableCell>
+                                    <TableCell className="max-w-[200px] truncate">{record.subject}</TableCell>
+                                    <TableCell>
+                                        {record.status === 'Opened' ? (
+                                            <Badge className="bg-green-100 text-green-800">
+                                                <Eye className="w-3 h-3 mr-1" />
+                                                Opened
+                                            </Badge>
+                                        ) : record.status === 'Sent' ? (
+                                            <Badge className="bg-blue-100 text-blue-800">
+                                                <Send className="w-3 h-3 mr-1" />
+                                                Sent
+                                            </Badge>
+                                        ) : (
+                                            <Badge variant="destructive">
+                                                <XCircle className="w-3 h-3 mr-1" />
+                                                Error
+                                            </Badge>
+                                        )}
+                                    </TableCell>
+                                    <TableCell>{format(parseISO(record.sentAt), 'Pp')}</TableCell>
+                                    <TableCell>
+                                        {record.openedAt ? (
+                                            <span className="text-green-600 font-medium">
+                                                {format(parseISO(record.openedAt), 'Pp')}
+                                            </span>
+                                        ) : (
+                                            '—'
+                                        )}
+                                    </TableCell>
+                                </TableRow>
+                            ))}
+                        </TableBody>
+                    </Table>
+                </div>
+            </CardContent>
+        </Card>
+    );
+}
+
 function CampaignProgress({ isActive, stats }: { 
   isActive: boolean; 
   stats?: { sent: number; total: number; } 
@@ -306,7 +421,17 @@ function CampaignProgress({ isActive, stats }: {
   );
 }
 
-export default function Dashboard({ initialCampaign, initialContacts, initialAnalytics }: { initialCampaign: Campaign, initialContacts: Contact[], initialAnalytics: Analytics }) {
+export default function Dashboard({ 
+    initialCampaign, 
+    initialContacts, 
+    initialAnalytics,
+    initialEmailRecords = []
+}: { 
+    initialCampaign: Campaign, 
+    initialContacts: Contact[], 
+    initialAnalytics: Analytics,
+    initialEmailRecords?: EmailRecord[]
+}) {
     const router = useRouter();
     const { toast } = useToast();
     const [isSending, startSendingTransition] = useTransition();
@@ -314,18 +439,47 @@ export default function Dashboard({ initialCampaign, initialContacts, initialAna
     const campaign = useMemo(() => initialCampaign, [initialCampaign]);
     const contacts = useMemo(() => initialContacts, [initialContacts]);
     const analytics = useMemo(() => initialAnalytics, [initialAnalytics]);
+    const emailRecords = useMemo(() => initialEmailRecords, [initialEmailRecords]);
 
-    // Updated refresh interval to 2 seconds
+    // Enhanced refresh interval - every 2 seconds for real-time tracking
     useEffect(() => {
         const interval = setInterval(() => {
+            console.log('🔄 Auto-refreshing dashboard data...');
             refreshData();
-        }, 2000); // Faster refresh every 2 seconds
+        }, 2000);
 
         return () => clearInterval(interval);
     }, []);
 
     const refreshData = () => {
         router.refresh();
+    };
+
+    // Clean email records function
+    const handleCleanEmailRecords = async () => {
+        try {
+            const result = await cleanEmailRecords();
+            if (result.success) {
+                toast({
+                    title: "Records Cleared",
+                    description: result.message,
+                    className: "bg-green-100 text-green-900 border-green-200",
+                });
+                refreshData();
+            } else {
+                toast({
+                    variant: "destructive",
+                    title: "Error",
+                    description: result.message,
+                });
+            }
+        } catch (error) {
+            toast({
+                variant: "destructive",
+                title: "Error",
+                description: "Failed to clear email records.",
+            });
+        }
     };
     
     const handleSaveCampaign = async (data: Campaign) => {
@@ -393,7 +547,8 @@ export default function Dashboard({ initialCampaign, initialContacts, initialAna
                     description: result.message,
                     className: "bg-green-100 text-green-900 border-green-200",
                 });
-                refreshData();
+                // Force refresh after campaign
+                setTimeout(() => refreshData(), 1000);
             } else {
                 toast({
                     variant: "destructive",
@@ -404,25 +559,64 @@ export default function Dashboard({ initialCampaign, initialContacts, initialAna
         });
     };
 
+    // Real-time tracking indicators
+    const recentOpens = contacts.filter(c => 
+        c.openTimestamp && 
+        new Date(c.openTimestamp) > new Date(Date.now() - 30000) // Last 30 seconds
+    );
+
+    const veryRecentOpens = contacts.filter(c => 
+        c.openTimestamp && 
+        new Date(c.openTimestamp) > new Date(Date.now() - 10000) // Last 10 seconds
+    );
+
     return (
         <main className="flex flex-1 flex-col gap-4 p-4 md:gap-8 md:p-8 bg-background">
             <div className="flex items-center justify-between">
                 <div>
                     <h1 className="text-3xl font-bold tracking-tight font-headline">Campaign Dashboard</h1>
-                    <p className="text-muted-foreground">Manage and send your email campaigns with perfect tracking.</p>
+                    <div className="flex items-center gap-2 text-muted-foreground">
+                        <span>Manage and send your email campaigns with perfect tracking.</span>
+                        {veryRecentOpens.length > 0 && (
+                            <div className="flex items-center gap-1 text-green-600 font-medium animate-pulse">
+                                <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                                <span className="text-sm">LIVE: {veryRecentOpens.length} just opened</span>
+                            </div>
+                        )}
+                        {recentOpens.length > 0 && veryRecentOpens.length === 0 && (
+                            <div className="flex items-center gap-1 text-orange-600 font-medium">
+                                <div className="w-2 h-2 bg-orange-500 rounded-full"></div>
+                                <span className="text-sm">{recentOpens.length} recent opens</span>
+                            </div>
+                        )}
+                    </div>
                 </div>
-                <Button size="lg" onClick={handleSendCampaign} disabled={isSending}>
-                    {isSending ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Sending Campaign...</> : <><Send className="mr-2 h-4 w-4" /> Send Campaign</>}
-                </Button>
+                <div className="flex items-center gap-2">
+                    <div className="text-xs text-right text-muted-foreground">
+                        <p>🔄 Auto-refresh: 2s</p>
+                        <p>📊 Real-time tracking</p>
+                    </div>
+                    <Button size="lg" onClick={handleSendCampaign} disabled={isSending}>
+                        {isSending ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Sending Campaign...</> : <><Send className="mr-2 h-4 w-4" /> Send Campaign</>}
+                    </Button>
+                </div>
             </div>
 
             <div className="grid gap-4 md:gap-8">
                 <AnalyticsCard analytics={analytics} />
 
                 <Tabs defaultValue="campaign-editor" className="w-full">
-                    <TabsList className="grid w-full grid-cols-2">
+                    <TabsList className="grid w-full grid-cols-3">
                         <TabsTrigger value="campaign-editor">Campaign Editor</TabsTrigger>
                         <TabsTrigger value="contacts">Contacts</TabsTrigger>
+                        <TabsTrigger value="email-records">
+                            Email Records
+                            {emailRecords.length > 0 && (
+                                <Badge className="ml-2 bg-primary/20 text-primary">
+                                    {emailRecords.length}
+                                </Badge>
+                            )}
+                        </TabsTrigger>
                     </TabsList>
 
                     <TabsContent value="campaign-editor" className="pt-4">
@@ -438,6 +632,13 @@ export default function Dashboard({ initialCampaign, initialContacts, initialAna
                             onCleanContacts={handleCleanContacts}
                         />
                     </TabsContent>
+
+                    <TabsContent value="email-records" className="pt-4">
+                        <EmailRecordsTable 
+                            emailRecords={emailRecords} 
+                            onCleanRecords={handleCleanEmailRecords}
+                        />
+                    </TabsContent>
                 </Tabs>
             </div>
         </main>
@@ -448,12 +649,10 @@ function CampaignEditor({ campaign, onSave }: { campaign: Campaign, onSave: (dat
     const [isPending, startTransition] = useTransition();
     const [subject, setSubject] = useState(campaign.subject);
     const [body, setBody] = useState(campaign.body);
-    const [senderName, setSenderName] = useState(campaign.senderName);
-    const [senderEmail, setSenderEmail] = useState(campaign.senderEmail);
 
     const handleSave = () => {
         startTransition(() => {
-            onSave({ ...campaign, subject, body, senderName, senderEmail });
+            onSave({ ...campaign, subject, body });
         });
     };
 
@@ -461,18 +660,36 @@ function CampaignEditor({ campaign, onSave }: { campaign: Campaign, onSave: (dat
         <Card>
             <CardHeader>
                 <CardTitle>Campaign Editor</CardTitle>
-                <CardDescription>Craft your email content and settings.</CardDescription>
+                <CardDescription>
+                    Craft your email content and settings. Use {'{{firstName}}'} and {'{{lastName}}'} for personalization.
+                </CardDescription>
             </CardHeader>
             <CardContent>
                 <div className="space-y-4">
                     <div>
                         <Label htmlFor="subject">Subject</Label>
-                        <Input id="subject" value={subject} onChange={e => setSubject(e.target.value)} placeholder="e.g. An important message for {{firstName}}" />
-                        <p className="text-xs text-muted-foreground mt-1">Use {'{{firstName}}'} and {'{{lastName}}'} for personalization.</p>
+                        <Input 
+                            id="subject" 
+                            value={subject} 
+                            onChange={e => setSubject(e.target.value)} 
+                            placeholder="e.g. An important message for {{firstName}}" 
+                        />
+                        <p className="text-xs text-muted-foreground mt-1">
+                            Use {'{{firstName}}'} and {'{{lastName}}'} for personalization.
+                        </p>
                     </div>
                     <div>
                         <Label htmlFor="body">Body</Label>
-                        <Textarea id="body" value={body} onChange={e => setBody(e.target.value)} rows={10} placeholder="e.g. Dear {{firstName}}," />
+                        <Textarea 
+                            id="body" 
+                            value={body} 
+                            onChange={e => setBody(e.target.value)} 
+                            rows={10} 
+                            placeholder="e.g. Dear {{firstName}}," 
+                        />
+                        <p className="text-xs text-muted-foreground mt-1">
+                            Available variables: {'{{firstName}}'}, {'{{lastName}}'}, {'{{fullName}}'}, {'{{teamLeadName}}'}, {'{{date}}'}
+                        </p>
                     </div>
                 </div>
             </CardContent>

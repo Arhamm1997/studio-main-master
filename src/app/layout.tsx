@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Home, Info, BotMessageSquare, Settings } from "lucide-react";
+import { Home, Info, BotMessageSquare, Settings, TestTube, Activity } from "lucide-react";
 import "./globals.css";
 import { SidebarProvider, Sidebar, SidebarInset, SidebarContent, SidebarMenu, SidebarMenuItem, SidebarMenuButton, SidebarHeader } from "@/components/ui/sidebar";
 import { Toaster } from "@/components/ui/toaster";
@@ -49,6 +49,14 @@ export default function RootLayout({
                     <SidebarMenuButton tooltip="Instructions" className="font-medium">
                       <Info />
                       <span>Instructions</span>
+                    </SidebarMenuButton>
+                  </Link>
+                </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <Link href="/test-tracking">
+                    <SidebarMenuButton tooltip="Test Email Tracking" className="font-medium">
+                      <TestTube />
+                      <span>Test Tracking</span>
                     </SidebarMenuButton>
                   </Link>
                 </SidebarMenuItem>
