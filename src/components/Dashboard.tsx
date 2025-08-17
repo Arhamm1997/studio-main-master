@@ -1,3 +1,4 @@
+// src/components/Dashboard.tsx - ENHANCED WITH ULTRA-FAST REAL-TIME UPDATES
 'use client';
 
 import type { Analytics, Campaign, Contact, EmailRecord } from '@/lib/types';
@@ -18,15 +19,20 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 
 import { addContact, sendCampaign, updateCampaign, deleteContacts, cleanContacts, addContacts, cleanEmailRecords } from '@/app/actions';
-import { CircleUser, Mail, Users, BarChart, Send, PlusCircle, Loader2, Rocket, CheckCircle2, XCircle, Trash2, Sparkles, Upload, Eye, Clock, Activity } from 'lucide-react';
-import { format, parseISO } from 'date-fns';
+import { CircleUser, Mail, Users, BarChart, Send, PlusCircle, Loader2, Rocket, CheckCircle2, XCircle, Trash2, Sparkles, Upload, Eye, Clock, Activity, Zap, Timer, AlertCircle, TestTube } from 'lucide-react';
+import { format, parseISO, formatDistanceToNow } from 'date-fns';
+import Link from 'next/link';
 
+// Enhanced Analytics Card with ultra-real-time indicators
 function AnalyticsCard({ analytics }: { analytics: Analytics }) {
     return (
         <Card>
             <CardHeader>
-                <CardTitle className="flex items-center gap-2"><BarChart className="w-6 h-6" />Campaign Analytics</CardTitle>
-                <CardDescription>An overview of your campaign performance.</CardDescription>
+                <CardTitle className="flex items-center gap-2">
+                    <BarChart className="w-6 h-6" />
+                    🔴 ULTRA-LIVE Campaign Analytics
+                </CardTitle>
+                <CardDescription>Real-time overview with exact timestamps and instant 1-second updates.</CardDescription>
             </CardHeader>
             <CardContent>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
@@ -40,10 +46,11 @@ function AnalyticsCard({ analytics }: { analytics: Analytics }) {
                         <p className="text-2xl font-bold">{analytics.sent}</p>
                         <p className="text-sm text-muted-foreground">Sent</p>
                     </div>
-                    <div className="p-4 rounded-lg bg-secondary">
-                        <Mail className="w-6 h-6 mx-auto mb-2 text-green-500" />
-                        <p className="text-2xl font-bold">{analytics.opened}</p>
-                        <p className="text-sm text-muted-foreground">Opened</p>
+                    <div className="p-4 rounded-lg bg-secondary relative">
+                        <Eye className="w-6 h-6 mx-auto mb-2 text-green-500" />
+                        <p className="text-2xl font-bold animate-pulse">{analytics.opened}</p>
+                        <p className="text-sm text-muted-foreground">Opened (Live)</p>
+                        <div className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full animate-ping"></div>
                     </div>
                     <div className="p-4 rounded-lg bg-secondary">
                         <Rocket className="w-6 h-6 mx-auto mb-2 text-violet-500" />
@@ -59,6 +66,15 @@ function AnalyticsCard({ analytics }: { analytics: Analytics }) {
                         </div>
                         <Progress value={analytics.sentRate} />
                     </div>
+                    {analytics.opened > 0 && (
+                        <div>
+                            <div className="flex justify-between mb-1">
+                                <span className="text-sm font-medium text-muted-foreground">Open Progress</span>
+                                <span className="text-sm font-medium">{analytics.opened} / {analytics.sent}</span>
+                            </div>
+                            <Progress value={analytics.openRate} className="bg-green-100" />
+                        </div>
+                    )}
                 </div>
             </CardContent>
         </Card>
@@ -120,6 +136,7 @@ function AddContactDialog({ onAdd }: { onAdd: (contact: Omit<Contact, 'id'>) => 
     );
 }
 
+// ENHANCED Contacts Table with ultra-precise timestamps
 function ContactsTable({ 
     contacts, 
     onAddContact, 
@@ -204,26 +221,119 @@ function ContactsTable({
         event.target.value = '';
     };
 
-    const StatusPill = ({ status }: { status: Contact['status'] }) => {
+    // ENHANCED status pill with ULTRA-precise timing
+    const StatusPill = ({ contact }: { contact: Contact }) => {
         const baseClasses = "px-2 py-1 text-xs font-medium rounded-full inline-flex items-center gap-1.5";
-        if (status === 'Sent') {
-            return <div className={`${baseClasses} bg-blue-100 text-blue-800`}><CheckCircle2 className="w-3 h-3" />Sent</div>;
+        
+        // Calculate ultra-precise time differences
+        const now = Date.now();
+        const isInstantOpen = contact.openTimestamp && 
+            new Date(contact.openTimestamp).getTime() > (now - 5000); // Last 5 seconds
+        const isVeryRecentOpen = contact.openTimestamp && 
+            new Date(contact.openTimestamp).getTime() > (now - 30000); // Last 30 seconds
+        const isRecentOpen = contact.openTimestamp && 
+            new Date(contact.openTimestamp).getTime() > (now - 60000); // Last minute
+        
+        if (contact.status === 'Sent') {
+            return (
+                <div className={`${baseClasses} bg-blue-100 text-blue-800`}>
+                    <CheckCircle2 className="w-3 h-3" />
+                    Sent
+                </div>
+            );
         }
-        if (status === 'Opened') {
-            return <div className={`${baseClasses} bg-green-100 text-green-800`}><Eye className="w-3 h-3" />Opened</div>;
+        
+        if (contact.status === 'Opened') {
+            return (
+                <div className={`${baseClasses} ${
+                    isInstantOpen ? 'bg-red-100 text-red-800 animate-bounce ring-2 ring-red-400' : 
+                    isVeryRecentOpen ? 'bg-orange-100 text-orange-800 animate-pulse ring-2 ring-orange-300' : 
+                    isRecentOpen ? 'bg-green-100 text-green-800 ring-2 ring-green-300' : 
+                    'bg-green-100 text-green-800'
+                }`}>
+                    <Eye className="w-3 h-3" />
+                    {isInstantOpen ? '🔥 JUST NOW!' : 
+                     isVeryRecentOpen ? '⚡ Very Recent' : 
+                     isRecentOpen ? 'Recently Opened' : 'Opened'}
+                </div>
+            );
         }
-        if (status === 'Error') {
-            return <div className={`${baseClasses} bg-red-100 text-red-800`}><XCircle className="w-3 h-3" />Error</div>;
+        
+        if (contact.status === 'Error') {
+            return (
+                <div className={`${baseClasses} bg-red-100 text-red-800`}>
+                    <XCircle className="w-3 h-3" />
+                    Error
+                </div>
+            );
         }
-        return <div className={`${baseClasses} bg-yellow-100 text-yellow-800`}><Clock className="w-3 h-3" />Pending</div>;
+        
+        return (
+            <div className={`${baseClasses} bg-yellow-100 text-yellow-800`}>
+                <Clock className="w-3 h-3" />
+                Pending
+            </div>
+        );
+    };
+
+    // ULTRA-PRECISE timestamp formatting
+    const formatUltraPreciseTime = (timestamp: string | null) => {
+        if (!timestamp) return '—';
+        
+        const date = new Date(timestamp);
+        const now = new Date();
+        const diffMs = now.getTime() - date.getTime();
+        const diffSeconds = Math.floor(diffMs / 1000);
+        const diffMinutes = Math.floor(diffSeconds / 60);
+        
+        // Ultra-precise timing display
+        if (diffSeconds < 3) {
+            return (
+                <span className="text-red-600 font-bold animate-pulse">
+                    <Zap className="w-3 h-3 inline mr-1" />
+                    RIGHT NOW! ({format(date, 'HH:mm:ss.SSS')})
+                </span>
+            );
+        } else if (diffSeconds < 10) {
+            return (
+                <span className="text-red-600 font-bold">
+                    <Timer className="w-3 h-3 inline mr-1" />
+                    {diffSeconds}s ago ({format(date, 'HH:mm:ss')})
+                </span>
+            );
+        } else if (diffSeconds < 60) {
+            return (
+                <span className="text-orange-600 font-medium">
+                    {diffSeconds}s ago ({format(date, 'HH:mm:ss')})
+                </span>
+            );
+        } else if (diffMinutes < 60) {
+            return (
+                <span className="text-green-600 font-medium">
+                    {diffMinutes}m ago ({format(date, 'HH:mm:ss')})
+                </span>
+            );
+        } else {
+            return (
+                <span className="text-gray-600">
+                    {format(date, 'MMM d, HH:mm:ss')}
+                </span>
+            );
+        }
     };
     
     return (
         <Card>
             <CardHeader className="flex flex-row items-start justify-between">
                 <div>
-                    <CardTitle className="flex items-center gap-2"><CircleUser className="w-6 h-6" />Contacts</CardTitle>
-                    <CardDescription>Manage your campaign recipients.</CardDescription>
+                    <CardTitle className="flex items-center gap-2">
+                        <CircleUser className="w-6 h-6" />
+                        Contacts
+                        <Badge className="ml-2 bg-primary/20 text-primary">
+                            {contacts.length}
+                        </Badge>
+                    </CardTitle>
+                    <CardDescription>Manage recipients with ultra-real-time status and exact open timestamps.</CardDescription>
                 </div>
                 <div className="flex gap-2">
                     <input type="file" ref={fileInputRef} onChange={handleFileImport} accept=".csv" className="hidden" />
@@ -233,7 +343,7 @@ function ContactsTable({
             </CardHeader>
             <CardContent>
                  {selectedContactIds.length > 0 && (
-                    <div className="mb-4 flex items-center gap-2 p-2 rounded-lg bg-secondary">
+                    <div className="mb-4 flex items-center gap-2 p-3 rounded-lg bg-secondary">
                         <p className="text-sm font-medium">{selectedContactIds.length} selected</p>
                         <Button variant="outline" size="sm" onClick={handleClean} disabled={isPending}><Sparkles className="mr-2 h-4 w-4" />Clean</Button>
                         <Button variant="destructive" size="sm" onClick={handleDelete} disabled={isPending}><Trash2 className="mr-2 h-4 w-4" />Delete</Button>
@@ -258,16 +368,40 @@ function ContactsTable({
                                         No contacts yet. Add one or import a CSV to get started!
                                     </TableCell>
                                 </TableRow>
-                            ) : contacts.map(contact => (
-                                <TableRow key={contact.id} data-state={selectedContactIds.includes(contact.id) && "selected"}>
-                                    <TableCell><Checkbox checked={selectedContactIds.includes(contact.id)} onCheckedChange={(checked) => handleSelectOne(contact.id, !!checked)} /></TableCell>
-                                    <TableCell className="font-medium">{contact.firstName} {contact.lastName}</TableCell>
-                                    <TableCell className="text-muted-foreground">{contact.email}</TableCell>
-                                    <TableCell><StatusPill status={contact.status} /></TableCell>
-                                    <TableCell>{contact.sentTimestamp ? format(parseISO(contact.sentTimestamp), 'Pp') : '—'}</TableCell>
-                                    <TableCell>{contact.openTimestamp ? <span className="text-green-600 font-medium">{format(parseISO(contact.openTimestamp), 'Pp')}</span> : '—'}</TableCell>
-                                </TableRow>
-                            ))}
+                            ) : contacts.map(contact => {
+                                const now = Date.now();
+                                const isInstantOpen = contact.openTimestamp && 
+                                    new Date(contact.openTimestamp).getTime() > (now - 5000); // Last 5 seconds
+                                const isVeryRecentOpen = contact.openTimestamp && 
+                                    new Date(contact.openTimestamp).getTime() > (now - 30000); // Last 30 seconds
+                                
+                                return (
+                                    <TableRow 
+                                        key={contact.id} 
+                                        data-state={selectedContactIds.includes(contact.id) && "selected"}
+                                        className={
+                                            isInstantOpen ? 'bg-red-50 border-2 border-red-400 animate-pulse' :
+                                            isVeryRecentOpen ? 'bg-orange-50 border-2 border-orange-300 animate-pulse' : 
+                                            contact.status === 'Opened' ? 'bg-green-50 border border-green-200' : ''
+                                        }
+                                    >
+                                        <TableCell><Checkbox checked={selectedContactIds.includes(contact.id)} onCheckedChange={(checked) => handleSelectOne(contact.id, !!checked)} /></TableCell>
+                                        <TableCell className="font-medium">{contact.firstName} {contact.lastName}</TableCell>
+                                        <TableCell className="text-muted-foreground">{contact.email}</TableCell>
+                                        <TableCell><StatusPill contact={contact} /></TableCell>
+                                        <TableCell>
+                                            {contact.sentTimestamp ? (
+                                                <span className="text-blue-600">
+                                                    {format(parseISO(contact.sentTimestamp), 'MMM d, HH:mm:ss')}
+                                                </span>
+                                            ) : '—'}
+                                        </TableCell>
+                                        <TableCell>
+                                            {formatUltraPreciseTime(contact.openTimestamp)}
+                                        </TableCell>
+                                    </TableRow>
+                                );
+                            })}
                         </TableBody>
                     </Table>
                 </div>
@@ -276,7 +410,7 @@ function ContactsTable({
     );
 }
 
-// NEW EMAIL RECORDS TABLE COMPONENT WITH CLEAN OPTION
+// ENHANCED EMAIL RECORDS TABLE with ultra-precise timestamps
 function EmailRecordsTable({ emailRecords, onCleanRecords }: { 
     emailRecords: EmailRecord[]; 
     onCleanRecords: () => void;
@@ -289,6 +423,40 @@ function EmailRecordsTable({ emailRecords, onCleanRecords }: {
             await onCleanRecords();
         } finally {
             setIsClearing(false);
+        }
+    };
+
+    // Ultra-precise email timestamp formatting
+    const formatEmailTime = (timestamp: string | null) => {
+        if (!timestamp) return '—';
+        
+        const date = new Date(timestamp);
+        const now = new Date();
+        const diffMs = now.getTime() - date.getTime();
+        const diffSeconds = Math.floor(diffMs / 1000);
+        const diffMinutes = Math.floor(diffSeconds / 60);
+        
+        if (diffSeconds < 5) {
+            return (
+                <span className="text-red-600 font-bold animate-pulse">
+                    <Timer className="w-3 h-3 inline mr-1" />
+                    Just now!
+                </span>
+            );
+        } else if (diffSeconds < 60) {
+            return (
+                <span className="text-orange-600 font-medium">
+                    {diffSeconds}s ago
+                </span>
+            );
+        } else if (diffMinutes < 60) {
+            return (
+                <span className="text-green-600 font-medium">
+                    {diffMinutes}m ago
+                </span>
+            );
+        } else {
+            return format(date, 'MMM d, HH:mm:ss');
         }
     };
 
@@ -306,7 +474,7 @@ function EmailRecordsTable({ emailRecords, onCleanRecords }: {
                         )}
                     </CardTitle>
                     <CardDescription>
-                        Complete history of all sent emails and their status.
+                        Complete history with ultra-precise timestamps and real-time tracking status.
                     </CardDescription>
                 </div>
                 {emailRecords.length > 0 && (
@@ -346,41 +514,57 @@ function EmailRecordsTable({ emailRecords, onCleanRecords }: {
                                         No email records yet. Send a campaign to see records here!
                                     </TableCell>
                                 </TableRow>
-                            ) : emailRecords.map(record => (
-                                <TableRow key={record.id}>
-                                    <TableCell className="font-medium">{record.contactName}</TableCell>
-                                    <TableCell className="text-muted-foreground">{record.contactEmail}</TableCell>
-                                    <TableCell className="max-w-[200px] truncate">{record.subject}</TableCell>
-                                    <TableCell>
-                                        {record.status === 'Opened' ? (
-                                            <Badge className="bg-green-100 text-green-800">
-                                                <Eye className="w-3 h-3 mr-1" />
-                                                Opened
-                                            </Badge>
-                                        ) : record.status === 'Sent' ? (
-                                            <Badge className="bg-blue-100 text-blue-800">
-                                                <Send className="w-3 h-3 mr-1" />
-                                                Sent
-                                            </Badge>
-                                        ) : (
-                                            <Badge variant="destructive">
-                                                <XCircle className="w-3 h-3 mr-1" />
-                                                Error
-                                            </Badge>
-                                        )}
-                                    </TableCell>
-                                    <TableCell>{format(parseISO(record.sentAt), 'Pp')}</TableCell>
-                                    <TableCell>
-                                        {record.openedAt ? (
-                                            <span className="text-green-600 font-medium">
-                                                {format(parseISO(record.openedAt), 'Pp')}
+                            ) : emailRecords.map(record => {
+                                const isInstantOpen = record.openedAt && 
+                                    new Date(record.openedAt).getTime() > (Date.now() - 5000); // Last 5 seconds
+                                const isVeryRecentOpen = record.openedAt && 
+                                    new Date(record.openedAt).getTime() > (Date.now() - 30000); // Last 30 seconds
+                                
+                                return (
+                                    <TableRow 
+                                        key={record.id}
+                                        className={
+                                            isInstantOpen ? 'bg-red-50 border-2 border-red-400 animate-pulse' :
+                                            isVeryRecentOpen ? 'bg-orange-50 border border-orange-300' :
+                                            record.status === 'Opened' ? 'bg-green-50 border border-green-200' : ''
+                                        }
+                                    >
+                                        <TableCell className="font-medium">{record.contactName}</TableCell>
+                                        <TableCell className="text-muted-foreground">{record.contactEmail}</TableCell>
+                                        <TableCell className="max-w-[200px] truncate">{record.subject}</TableCell>
+                                        <TableCell>
+                                            {record.status === 'Opened' ? (
+                                                <Badge className={`bg-green-100 text-green-800 ${
+                                                    isInstantOpen ? 'animate-pulse ring-2 ring-red-400 bg-red-100 text-red-800' : 
+                                                    isVeryRecentOpen ? 'animate-pulse ring-2 ring-orange-300' : ''
+                                                }`}>
+                                                    <Eye className="w-3 h-3 mr-1" />
+                                                    {isInstantOpen ? '🔥 Just Opened!' : 
+                                                     isVeryRecentOpen ? '⚡ Recently!' : 'Opened'}
+                                                </Badge>
+                                            ) : record.status === 'Sent' ? (
+                                                <Badge className="bg-blue-100 text-blue-800">
+                                                    <Send className="w-3 h-3 mr-1" />
+                                                    Sent
+                                                </Badge>
+                                            ) : (
+                                                <Badge variant="destructive">
+                                                    <XCircle className="w-3 h-3 mr-1" />
+                                                    Error
+                                                </Badge>
+                                            )}
+                                        </TableCell>
+                                        <TableCell>
+                                            <span className="text-blue-600">
+                                                {format(parseISO(record.sentAt), 'MMM d, HH:mm:ss')}
                                             </span>
-                                        ) : (
-                                            '—'
-                                        )}
-                                    </TableCell>
-                                </TableRow>
-                            ))}
+                                        </TableCell>
+                                        <TableCell>
+                                            {formatEmailTime(record.openedAt)}
+                                        </TableCell>
+                                    </TableRow>
+                                );
+                            })}
                         </TableBody>
                     </Table>
                 </div>
@@ -441,12 +625,12 @@ export default function Dashboard({
     const analytics = useMemo(() => initialAnalytics, [initialAnalytics]);
     const emailRecords = useMemo(() => initialEmailRecords, [initialEmailRecords]);
 
-    // Enhanced refresh interval - every 2 seconds for real-time tracking
+    // 🔥 ULTRA-FAST refresh interval - every 1 second for instant updates
     useEffect(() => {
         const interval = setInterval(() => {
-            console.log('🔄 Auto-refreshing dashboard data...');
+            console.log('🔴 ULTRA-FAST refresh - checking for instant status updates...');
             refreshData();
-        }, 2000);
+        }, 1000); // 1 second for ultra-real-time effect
 
         return () => clearInterval(interval);
     }, []);
@@ -559,42 +743,64 @@ export default function Dashboard({
         });
     };
 
-    // Real-time tracking indicators
-    const recentOpens = contacts.filter(c => 
+    // ULTRA-PRECISE real-time tracking indicators
+    const now = Date.now();
+    const instantOpens = contacts.filter(c => 
         c.openTimestamp && 
-        new Date(c.openTimestamp) > new Date(Date.now() - 30000) // Last 30 seconds
+        new Date(c.openTimestamp).getTime() > (now - 5000) // Last 5 seconds
+    );
+    
+    const liveOpens = contacts.filter(c => 
+        c.openTimestamp && 
+        new Date(c.openTimestamp).getTime() > (now - 30000) // Last 30 seconds
     );
 
-    const veryRecentOpens = contacts.filter(c => 
+    const recentOpens = contacts.filter(c => 
         c.openTimestamp && 
-        new Date(c.openTimestamp) > new Date(Date.now() - 10000) // Last 10 seconds
+        new Date(c.openTimestamp).getTime() > (now - 60000) // Last minute
     );
 
     return (
         <main className="flex flex-1 flex-col gap-4 p-4 md:gap-8 md:p-8 bg-background">
             <div className="flex items-center justify-between">
                 <div>
-                    <h1 className="text-3xl font-bold tracking-tight font-headline">Campaign Dashboard</h1>
+                    <h1 className="text-3xl font-bold tracking-tight font-headline">🔴 ULTRA-LIVE Email Tracking Dashboard</h1>
                     <div className="flex items-center gap-2 text-muted-foreground">
-                        <span>Manage and send your email campaigns with perfect tracking.</span>
-                        {veryRecentOpens.length > 0 && (
-                            <div className="flex items-center gap-1 text-green-600 font-medium animate-pulse">
-                                <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                                <span className="text-sm">LIVE: {veryRecentOpens.length} just opened</span>
+                        <span>Real-time email tracking with exact timestamps and instant 1-second updates.</span>
+                        
+                        {instantOpens.length > 0 && (
+                            <div className="flex items-center gap-1 text-red-600 font-bold animate-bounce">
+                                <div className="w-2 h-2 bg-red-500 rounded-full animate-ping"></div>
+                                <span className="text-sm">🔥 INSTANT: {instantOpens.length} just opened!</span>
                             </div>
                         )}
-                        {recentOpens.length > 0 && veryRecentOpens.length === 0 && (
-                            <div className="flex items-center gap-1 text-orange-600 font-medium">
+                        
+                        {liveOpens.length > 0 && instantOpens.length === 0 && (
+                            <div className="flex items-center gap-1 text-orange-600 font-medium animate-pulse">
                                 <div className="w-2 h-2 bg-orange-500 rounded-full"></div>
-                                <span className="text-sm">{recentOpens.length} recent opens</span>
+                                <span className="text-sm">⚡ {liveOpens.length} live opens</span>
+                            </div>
+                        )}
+                        
+                        {recentOpens.length > 0 && liveOpens.length === 0 && (
+                            <div className="flex items-center gap-1 text-green-600 font-medium">
+                                <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                                <span className="text-sm">📊 {recentOpens.length} recent opens</span>
                             </div>
                         )}
                     </div>
                 </div>
                 <div className="flex items-center gap-2">
+                    <Link href="/test-tracking">
+                        <Button variant="outline" size="sm">
+                            <TestTube className="w-4 h-4 mr-2" />
+                            Test Tracking
+                        </Button>
+                    </Link>
                     <div className="text-xs text-right text-muted-foreground">
-                        <p>🔄 Auto-refresh: 2s</p>
-                        <p>📊 Real-time tracking</p>
+                        <p>🔴 ULTRA refresh: 1s</p>
+                        <p>📊 Exact timestamps</p>
+                        <p>⚡ Instant detection</p>
                     </div>
                     <Button size="lg" onClick={handleSendCampaign} disabled={isSending}>
                         {isSending ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Sending Campaign...</> : <><Send className="mr-2 h-4 w-4" /> Send Campaign</>}
@@ -608,7 +814,19 @@ export default function Dashboard({
                 <Tabs defaultValue="campaign-editor" className="w-full">
                     <TabsList className="grid w-full grid-cols-3">
                         <TabsTrigger value="campaign-editor">Campaign Editor</TabsTrigger>
-                        <TabsTrigger value="contacts">Contacts</TabsTrigger>
+                        <TabsTrigger value="contacts">
+                            Contacts
+                            {instantOpens.length > 0 && (
+                                <Badge className="ml-2 bg-red-500 text-white animate-pulse">
+                                    🔥 INSTANT
+                                </Badge>
+                            )}
+                            {liveOpens.length > 0 && instantOpens.length === 0 && (
+                                <Badge className="ml-2 bg-orange-500 text-white animate-pulse">
+                                    ⚡ LIVE
+                                </Badge>
+                            )}
+                        </TabsTrigger>
                         <TabsTrigger value="email-records">
                             Email Records
                             {emailRecords.length > 0 && (

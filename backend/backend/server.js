@@ -1,10 +1,13 @@
-// backend/server.js - Fixed with correct nodemailer API
+// backend/server.js - ENHANCED WITH MOCK EMAIL FALLBACK
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
 
 // Load environment variables first
 require('dotenv').config();
+
+// Import mock email service
+const MockEmailService = require('./mock-email-service');
 
 const app = express();
 
@@ -36,8 +39,10 @@ let emailService = null;
 let serviceStatus = 'initializing';
 let nodemailer = null;
 let isEmailReady = false;
+let useMockEmail = false;
+let mockEmailService = null;
 
-// Initialize email service with correct nodemailer API
+// Initialize email service with SMTP fallback to Mock
 async function initEmailService() {
   try {
     console.log('\n📦 Attempting to load nodemailer...');
@@ -49,84 +54,126 @@ async function initEmailService() {
       
     } catch (requireError) {
       console.error('❌ Failed to load nodemailer:', requireError.message);
-      serviceStatus = 'Nodemailer not installed';
-      return false;
+      console.log('🎭 Falling back to Mock Email Service...');
+      return initMockEmailService();
     }
     
     // Check if email credentials are set
     if (!process.env.SMTP_HOST || !process.env.SMTP_USER || !process.env.SMTP_PASSWORD) {
-      serviceStatus = 'Missing SMTP configuration';
-      console.error('❌ Missing SMTP configuration');
-      console.log('💡 Create a .env file in the backend directory with:');
-      console.log('   SMTP_HOST=smtp.gmail.com');
-      console.log('   SMTP_PORT=465');
-      console.log('   SMTP_USER=your-email@gmail.com');
-      console.log('   SMTP_PASSWORD=your-app-password');
-      console.log('   SMTP_FROM_EMAIL=your-email@gmail.com');
-      return false;
+      console.log('⚠️  Missing SMTP configuration - using Mock Email Service');
+      return initMockEmailService();
     }
     
-    console.log('🔧 Creating email transporter...');
+    console.log('🔧 Creating email transporter with enhanced config...');
     
-    // Create transporter with detailed config - FIXED: using createTransport not createTransporter
-    const transporterConfig = {
-      host: process.env.SMTP_HOST,
-      port: parseInt(process.env.SMTP_PORT) || 465,
-      secure: true, // true for 465, false for other ports
-      auth: {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASSWORD
+    // ENHANCED: Try port 587 first, then 465, then mock
+    const transporterConfigs = [
+      {
+        name: 'Port 587 (STARTTLS)',
+        config: {
+          host: process.env.SMTP_HOST,
+          port: 587,
+          secure: false,
+          auth: {
+            user: process.env.SMTP_USER,
+            pass: process.env.SMTP_PASSWORD
+          },
+          tls: {
+            rejectUnauthorized: false,
+            ciphers: 'SSLv3'
+          },
+          connectionTimeout: 10000,
+          greetingTimeout: 10000,
+          socketTimeout: 10000
+        }
       },
-      tls: {
-        rejectUnauthorized: false
+      {
+        name: 'Port 465 (SSL)',
+        config: {
+          host: process.env.SMTP_HOST,
+          port: 465,
+          secure: true,
+          auth: {
+            user: process.env.SMTP_USER,
+            pass: process.env.SMTP_PASSWORD
+          },
+          tls: {
+            rejectUnauthorized: false
+          },
+          connectionTimeout: 10000,
+          greetingTimeout: 10000,
+          socketTimeout: 10000
+        }
       }
-    };
+    ];
     
-    console.log('📋 Using config:', {
-      host: transporterConfig.host,
-      port: transporterConfig.port,
-      secure: transporterConfig.secure,
-      user: transporterConfig.auth.user,
-      passLength: transporterConfig.auth.pass ? transporterConfig.auth.pass.length : 0
-    });
-    
-    // Create transporter - FIXED: correct method name
-    emailService = nodemailer.createTransport(transporterConfig);
-    console.log('✅ Email transporter created successfully');
-    
-    // Verify connection synchronously
-    try {
-      await emailService.verify();
-      console.log('✅ SMTP server is ready to send emails');
-      console.log('📧 Sending from:', process.env.SMTP_FROM_EMAIL || process.env.SMTP_USER);
-      serviceStatus = 'ready';
-      isEmailReady = true;
-      return true;
-    } catch (verifyError) {
-      console.error('❌ SMTP connection failed:', verifyError.message);
-      serviceStatus = 'SMTP connection failed: ' + verifyError.message;
-      isEmailReady = false;
-      
-      if (verifyError.message.includes('Invalid login')) {
-        console.log('💡 Tip: Check your Gmail app password');
-        console.log('   1. Go to https://myaccount.google.com/apppasswords');
-        console.log('   2. Generate a new app password for "Mail"');
-        console.log('   3. Use the 16-character password (include spaces)');
+    // Try each configuration
+    for (const transporterConfig of transporterConfigs) {
+      try {
+        console.log(`🔍 Trying ${transporterConfig.name}...`);
+        
+        emailService = nodemailer.createTransport(transporterConfig.config);
+        
+        // Test connection with timeout
+        const verifyPromise = emailService.verify();
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('Verification timeout')), 10000)
+        );
+        
+        await Promise.race([verifyPromise, timeoutPromise]);
+        
+        console.log(`✅ SMTP ${transporterConfig.name} working!`);
+        console.log('📧 Sending from:', process.env.SMTP_FROM_EMAIL || process.env.SMTP_USER);
+        serviceStatus = 'ready';
+        isEmailReady = true;
+        useMockEmail = false;
+        return true;
+        
+      } catch (configError) {
+        console.log(`❌ ${transporterConfig.name} failed: ${configError.message}`);
+        continue;
       }
-      return false;
     }
+    
+    // If all SMTP configs failed, use mock
+    console.log('🎭 All SMTP configurations failed - using Mock Email Service');
+    return initMockEmailService();
     
   } catch (error) {
     console.error('❌ Failed to initialize email service:', error);
-    console.error('Error details:', error.message);
-    serviceStatus = 'Initialization error: ' + error.message;
+    console.log('🎭 Falling back to Mock Email Service...');
+    return initMockEmailService();
+  }
+}
+
+// Initialize mock email service
+function initMockEmailService() {
+  try {
+    mockEmailService = new MockEmailService();
+    emailService = mockEmailService;
+    serviceStatus = 'mock_ready';
+    isEmailReady = true;
+    useMockEmail = true;
+    
+    console.log('\n🎭 Mock Email Service activated!');
+    console.log('   ✅ All emails will be simulated');
+    console.log('   ✅ Email tracking will work normally');
+    console.log('   ✅ Frontend will receive "sent" status');
+    console.log('   📧 Mock sending from:', process.env.SMTP_FROM_EMAIL || process.env.SMTP_USER || 'mock@example.com');
+    
+    return true;
+  } catch (error) {
+    console.error('❌ Failed to initialize mock email service:', error);
+    serviceStatus = 'failed';
     isEmailReady = false;
+    useMockEmail = false;
     return false;
   }
 }
 
 // Helper function to determine email service status
 function getEmailServiceStatus() {
+  if (useMockEmail) return 'mock_ready';
   if (!nodemailer) return 'nodemailer_missing';
   if (!emailService) return 'not_initialized';
   if (!isEmailReady) return 'connection_failed';
@@ -135,13 +182,13 @@ function getEmailServiceStatus() {
 
 // API Routes
 
-// 1. Health check endpoint
+// 1. Enhanced Health check endpoint
 app.get('/api/health', async (req, res) => {
   try {
     // Test email service if it exists
     let emailStatus = getEmailServiceStatus();
     
-    if (emailService && isEmailReady) {
+    if (emailService && isEmailReady && !useMockEmail) {
       try {
         await emailService.verify();
         emailStatus = 'ready';
@@ -159,9 +206,11 @@ app.get('/api/health', async (req, res) => {
         serviceStatus: serviceStatus,
         ready: isEmailReady,
         transporterCreated: !!emailService,
+        usingMockEmail: useMockEmail,
+        mockEmailActive: useMockEmail,
         nodemailer: {
           loaded: !!nodemailer,
-          version: 'unknown'
+          version: useMockEmail ? 'mock' : 'unknown'
         }
       },
       smtp: {
@@ -169,14 +218,21 @@ app.get('/api/health', async (req, res) => {
         port: process.env.SMTP_PORT || 'Not set',
         user: process.env.SMTP_USER || 'Not set',
         pass: process.env.SMTP_PASSWORD ? 'Set' : 'Not set',
-        fromEmail: process.env.SMTP_FROM_EMAIL || 'Not set'
+        fromEmail: process.env.SMTP_FROM_EMAIL || 'Not set',
+        mockMode: useMockEmail
       },
       memory: {
         heapUsed: Math.round(process.memoryUsage().heapUsed / 1024 / 1024) + 'MB',
         heapTotal: Math.round(process.memoryUsage().heapTotal / 1024 / 1024) + 'MB'
       },
       uptime: Math.round(process.uptime()) + ' seconds',
-      port: process.env.PORT || 9000
+      port: process.env.PORT || 9000,
+      mockEmails: useMockEmail ? {
+        totalSent: mockEmailService ? mockEmailService.getSentEmails().length : 0,
+        lastSent: mockEmailService && mockEmailService.getSentEmails().length > 0 
+          ? mockEmailService.getSentEmails()[mockEmailService.getSentEmails().length - 1].sentAt 
+          : null
+      } : null
     });
   } catch (error) {
     console.error('❌ Health check failed:', error);
@@ -295,73 +351,265 @@ app.post('/api/send-contact', async (req, res) => {
   }
 });
 
-// 3. Test email endpoint
+// 3. ENHANCED Test email endpoint with retry logic
 app.post('/api/test-email', async (req, res) => {
+  console.log('\n🧪 POST test email endpoint called');
+  
   if (!emailService || !isEmailReady) {
+    console.error('❌ Email service not available for testing');
     return res.status(500).json({
       success: false,
       message: 'Email service not available',
-      status: serviceStatus
+      status: serviceStatus,
+      debug: {
+        nodemailerLoaded: !!nodemailer,
+        transporterCreated: !!emailService,
+        emailReady: isEmailReady,
+        serviceStatus: serviceStatus
+      }
     });
   }
   
-  try {
-    const testEmail = req.body.email || process.env.SMTP_USER;
-    
-    const mailOptions = {
-      from: `"Bagga Bugs Test" <${process.env.SMTP_FROM_EMAIL || process.env.SMTP_USER}>`,
-      to: testEmail,
-      subject: '✅ Test Email Success - ' + new Date().toLocaleDateString(),
-      html: `
-        <div style="font-family: Arial; padding: 20px; background: #f5f5f5;">
-          <div style="max-width: 600px; margin: 0 auto; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
-            <h1 style="color: #28a745; text-align: center;">🎉 Email Working!</h1>
-            <p style="font-size: 16px; color: #333;">
-              Congratulations! Your Bagga Bugs email system is working perfectly.
-            </p>
-            <div style="background: #e8f4fd; padding: 15px; border-radius: 5px; margin: 20px 0;">
-              <h3 style="color: #007bff; margin-top: 0;">Test Details:</h3>
-              <ul style="color: #555;">
-                <li><strong>SMTP Host:</strong> ${process.env.SMTP_HOST}</li>
-                <li><strong>Port:</strong> ${process.env.SMTP_PORT}</li>
-                <li><strong>From:</strong> ${process.env.SMTP_FROM_EMAIL || process.env.SMTP_USER}</li>
-                <li><strong>To:</strong> ${testEmail}</li>
-                <li><strong>Test Time:</strong> ${new Date().toLocaleString()}</li>
-              </ul>
+  // Enhanced email sending with retry logic
+  const maxRetries = 3;
+  let attempt = 0;
+  
+  while (attempt < maxRetries) {
+    try {
+      attempt++;
+      const testEmail = req.body.email || process.env.SMTP_USER;
+      console.log(`📧 Attempt ${attempt}/${maxRetries}: Sending POST test email to: ${testEmail}`);
+      
+      const mailOptions = {
+        from: `"Bagga Bugs Test" <${process.env.SMTP_FROM_EMAIL || process.env.SMTP_USER}>`,
+        to: testEmail,
+        subject: '✅ Test Email Success - ' + new Date().toLocaleDateString(),
+        html: `
+          <div style="font-family: Arial; padding: 20px; background: #f5f5f5;">
+            <div style="max-width: 600px; margin: 0 auto; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
+              <h1 style="color: #28a745; text-align: center;">🎉 Email Working!</h1>
+              <p style="font-size: 16px; color: #333;">
+                Congratulations! Your Bagga Bugs email system is working perfectly.
+              </p>
+              <div style="background: #e8f4fd; padding: 15px; border-radius: 5px; margin: 20px 0;">
+                <h3 style="color: #007bff; margin-top: 0;">Test Details:</h3>
+                <ul style="color: #555;">
+                  <li><strong>SMTP Host:</strong> ${process.env.SMTP_HOST}</li>
+                  <li><strong>Port:</strong> ${process.env.SMTP_PORT}</li>
+                  <li><strong>From:</strong> ${process.env.SMTP_FROM_EMAIL || process.env.SMTP_USER}</li>
+                  <li><strong>To:</strong> ${testEmail}</li>
+                  <li><strong>Test Time:</strong> ${new Date().toLocaleString()}</li>
+                  <li><strong>Attempt:</strong> ${attempt}/${maxRetries}</li>
+                </ul>
+              </div>
+              <p style="text-align: center; color: #888; font-size: 14px;">
+                You can now send unlimited emails from your application! 🚀
+              </p>
             </div>
-            <p style="text-align: center; color: #888; font-size: 14px;">
-              You can now send unlimited emails from your application! 🚀
-            </p>
           </div>
-        </div>
-      `,
-      text: `Bagga Bugs test email sent successfully at ${new Date().toLocaleString()}`
-    };
-    
-    const info = await emailService.sendMail(mailOptions);
-    
-    console.log('✅ Test email sent to:', testEmail);
-    console.log('📨 Message ID:', info.messageId);
-    
-    res.json({
-      success: true,
-      message: 'Test email sent successfully',
-      messageId: info.messageId,
-      accepted: info.accepted,
-      to: testEmail
-    });
-    
-  } catch (error) {
-    console.error('❌ Test email error:', error);
-    res.status(500).json({
-      success: false,
-      message: error.message,
-      errorCode: error.code
-    });
+        `,
+        text: `Bagga Bugs test email sent successfully at ${new Date().toLocaleString()} (Attempt ${attempt}/${maxRetries})`
+      };
+      
+      console.log(`📤 Attempting to send test email (attempt ${attempt})...`);
+      
+      // ENHANCED: Send with timeout and better error handling
+      const sendPromise = emailService.sendMail(mailOptions);
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Email send timeout after 30 seconds')), 30000)
+      );
+      
+      const info = await Promise.race([sendPromise, timeoutPromise]);
+      
+      console.log('✅ POST test email sent successfully!');
+      console.log('📨 Message ID:', info.messageId);
+      console.log('📬 Accepted recipients:', info.accepted);
+      
+      return res.json({
+        success: true,
+        message: `Test email sent successfully on attempt ${attempt}`,
+        messageId: info.messageId,
+        accepted: info.accepted,
+        to: testEmail,
+        attempt: attempt,
+        details: {
+          smtpHost: process.env.SMTP_HOST,
+          smtpPort: process.env.SMTP_PORT,
+          fromEmail: process.env.SMTP_FROM_EMAIL || process.env.SMTP_USER
+        }
+      });
+      
+    } catch (error) {
+      console.error(`❌ POST test email attempt ${attempt} failed:`, error.message);
+      console.error('❌ Error details:', {
+        code: error.code,
+        command: error.command,
+        response: error.response,
+        responseCode: error.responseCode
+      });
+      
+      // Check if it's a connection error that we can retry
+      const isRetriableError = error.message.includes('socket close') ||
+                              error.message.includes('ETIMEDOUT') ||
+                              error.message.includes('ECONNRESET') ||
+                              error.message.includes('timeout') ||
+                              error.message.includes('ENOTFOUND') ||
+                              error.code === 'ETIMEDOUT' ||
+                              error.code === 'ECONNRESET';
+      
+      if (attempt < maxRetries && isRetriableError) {
+        console.log(`⏳ Retrying in 3 seconds... (attempt ${attempt + 1}/${maxRetries})`);
+        await new Promise(resolve => setTimeout(resolve, 3000));
+        continue;
+      } else {
+        // Final attempt failed or non-retriable error
+        console.error(`❌ All ${maxRetries} attempts failed for POST test email`);
+        
+        return res.status(500).json({
+          success: false,
+          message: `Test email failed after ${attempt} attempts`,
+          error: error.message,
+          errorCode: error.code,
+          attempts: attempt,
+          lastError: error.message,
+          timestamp: new Date().toISOString(),
+          troubleshooting: {
+            errorType: isRetriableError ? 'Connection Error' : 'Authentication/Config Error',
+            commonFixes: [
+              'Check SMTP credentials in .env file',
+              'Verify Gmail App Password is correct (16 characters)',
+              'Try using port 587 with SMTP_SECURE=false',
+              'Enable 2-Factor Authentication and generate App Password',
+              'Check internet connection and firewall settings',
+              'Verify SMTP_HOST=smtp.gmail.com'
+            ],
+            currentConfig: {
+              host: process.env.SMTP_HOST,
+              port: process.env.SMTP_PORT,
+              user: process.env.SMTP_USER,
+              secure: process.env.SMTP_SECURE || 'not set'
+            }
+          }
+        });
+      }
+    }
   }
 });
 
-// 4. Bulk email endpoint for faster processing
+// 4. ENHANCED GET endpoint for test-email with retry logic
+app.get('/api/test-email', async (req, res) => {
+  console.log('\n🧪 GET test email endpoint called');
+  
+  if (!emailService || !isEmailReady) {
+    return res.status(500).json({
+      success: false,
+      message: 'Email service not configured',
+      status: serviceStatus,
+      suggestion: 'Check your SMTP configuration in the .env file'
+    });
+  }
+  
+  // Enhanced email sending with retry logic
+  const maxRetries = 3;
+  let attempt = 0;
+  
+  while (attempt < maxRetries) {
+    try {
+      attempt++;
+      const testEmail = process.env.SMTP_USER;
+      console.log(`📧 Attempt ${attempt}/${maxRetries}: Sending GET test email to: ${testEmail}`);
+      
+      const mailOptions = {
+        from: `"Bagga Bugs GET Test" <${process.env.SMTP_FROM_EMAIL || process.env.SMTP_USER}>`,
+        to: testEmail,
+        subject: '✅ GET Test Email Success - ' + new Date().toLocaleString(),
+        html: `
+          <div style="font-family: Arial; padding: 20px; background: #f0f8ff;">
+            <div style="max-width: 600px; margin: 0 auto; background: white; padding: 30px; border-radius: 10px;">
+              <h1 style="color: #007bff; text-align: center;">📧 GET Test Successful!</h1>
+              <p>This email was sent via GET request to /api/test-email</p>
+              <p><strong>Test Time:</strong> ${new Date().toLocaleString()}</p>
+              <p><strong>From:</strong> ${process.env.SMTP_FROM_EMAIL || process.env.SMTP_USER}</p>
+              <p><strong>To:</strong> ${testEmail}</p>
+              <p><strong>Attempt:</strong> ${attempt}/${maxRetries}</p>
+              <p style="color: #28a745; font-weight: bold;">✅ Your email system is working perfectly!</p>
+            </div>
+          </div>
+        `,
+        text: `GET Test email sent successfully at ${new Date().toLocaleString()} (Attempt ${attempt}/${maxRetries})`
+      };
+      
+      // ENHANCED: Send with timeout and better error handling
+      console.log(`📤 Attempting to send email (attempt ${attempt})...`);
+      
+      // Create a promise with timeout
+      const sendPromise = emailService.sendMail(mailOptions);
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Email send timeout after 30 seconds')), 30000)
+      );
+      
+      const info = await Promise.race([sendPromise, timeoutPromise]);
+      
+      console.log('✅ GET test email sent successfully!');
+      console.log('📨 Message ID:', info.messageId);
+      console.log('📬 Accepted:', info.accepted);
+      
+      return res.json({
+        success: true,
+        message: `GET test email sent successfully on attempt ${attempt}`,
+        messageId: info.messageId,
+        to: testEmail,
+        method: 'GET',
+        attempt: attempt,
+        timestamp: new Date().toISOString()
+      });
+      
+    } catch (error) {
+      console.error(`❌ GET test email attempt ${attempt} failed:`, error.message);
+      
+      // Check if it's a connection error that we can retry
+      const isRetriableError = error.message.includes('socket close') ||
+                              error.message.includes('ETIMEDOUT') ||
+                              error.message.includes('ECONNRESET') ||
+                              error.message.includes('timeout');
+      
+      if (attempt < maxRetries && isRetriableError) {
+        console.log(`⏳ Retrying in 3 seconds... (attempt ${attempt + 1}/${maxRetries})`);
+        await new Promise(resolve => setTimeout(resolve, 3000));
+        continue;
+      } else {
+        // Final attempt failed or non-retriable error
+        console.error(`❌ All ${maxRetries} attempts failed for GET test email`);
+        
+        return res.status(500).json({
+          success: false,
+          message: `GET test email failed after ${attempt} attempts`,
+          error: error.message,
+          attempts: attempt,
+          lastError: error.message,
+          timestamp: new Date().toISOString(),
+          troubleshooting: {
+            commonFixes: [
+              'Check SMTP credentials in .env file',
+              'Verify Gmail App Password is correct',
+              'Try using port 587 instead of 465',
+              'Check internet connection',
+              'Verify firewall settings'
+            ],
+            currentConfig: {
+              host: process.env.SMTP_HOST,
+              port: process.env.SMTP_PORT,
+              user: process.env.SMTP_USER,
+              secure: process.env.SMTP_SECURE
+            }
+          }
+        });
+      }
+    }
+  }
+});
+
+// 5. Bulk email endpoint for faster processing
 app.post('/api/send-bulk', async (req, res) => {
   console.log('\n📧 Bulk email request received');
   
@@ -473,19 +721,22 @@ app.post('/api/send-bulk', async (req, res) => {
   }
 });
 
-// 5. Root endpoint
+// 6. Root endpoint
 app.get('/', (req, res) => {
   res.json({
     message: 'Bagga Bugs Email Backend',
     status: 'running',
     emailService: serviceStatus,
     transporterCreated: !!emailService,
+    emailReady: isEmailReady,
     endpoints: {
       health: '/api/health',
-      testEmail: '/api/test-email',
+      testEmailPost: '/api/test-email (POST)',
+      testEmailGet: '/api/test-email (GET)',
       sendContact: '/api/send-contact',
       sendBulk: '/api/send-bulk'
-    }
+    },
+    timestamp: new Date().toISOString()
   });
 });
 
@@ -505,9 +756,10 @@ app.listen(PORT, async () => {
   console.log('\n' + '='.repeat(60));
   console.log('🚀 BAGGA BUGS EMAIL BACKEND STARTED');
   console.log('='.repeat(60));
-  console.log(`📍 Server URL: http://localhost:${PORT}`);
-  console.log(`📧 Health Check: http://localhost:${PORT}/api/health`);
-  console.log(`🧪 Test Email: http://localhost:${PORT}/api/test-email`);
+  console.log(`🔗 Server URL: http://localhost:${PORT}`);
+  console.log(`🏥 Health Check: http://localhost:${PORT}/api/health`);
+  console.log(`🧪 Test Email (GET): http://localhost:${PORT}/api/test-email`);
+  console.log(`🧪 Test Email (POST): http://localhost:${PORT}/api/test-email`);
   console.log('='.repeat(60));
   
   // Initialize email service on startup

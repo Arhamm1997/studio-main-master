@@ -1,28 +1,13 @@
 [
   {
-    "id": "1755312996032",
-    "contactId": "1",
-    "contactEmail": "arsparks571@gmail.com",
-    "contactName": "Arham Awan",
-    "subject": "Hello Arham, Important Message for you",
-    "sentAt": "2025-08-16T02:56:36.031Z",
-    "openedAt": "2025-08-16T03:03:24.091Z",
-    "status": "Opened",
-    "campaignData": {
-      "subject": "Hello {{firstName}}, Important Message for you",
-      "body": "Dear {{firstName}} {{lastName}},\n\nWe hope this message finds you well!\n\nWe wanted to share something important with you about BAGGA BUGS - our new email solution. It's designed to be powerful and easy to use.\n\nLearn more on our website.\n\nBest regards,\n{{teamLeadName}}",
-      "senderName": "Arham Awan"
-    }
-  },
-  {
-    "id": "1755313648093",
+    "id": "email_1755473827370_d548ckgl5",
     "contactId": "2",
-    "contactEmail": "legacyheatingandcooling123@gmail.com",
-    "contactName": "c c",
-    "subject": "Hello c, Important Message for you",
-    "sentAt": "2025-08-16T03:07:28.092Z",
-    "openedAt": "2025-08-16T03:08:43.138Z",
-    "status": "Opened",
+    "contactEmail": "teraboapk@gmail.com",
+    "contactName": "Firehouse Subs",
+    "subject": "Hello Firehouse, Important Message for you",
+    "sentAt": "2025-08-17T23:37:03.463Z",
+    "openedAt": null,
+    "status": "Sent",
     "campaignData": {
       "subject": "Hello {{firstName}}, Important Message for you",
       "body": "Dear {{firstName}} {{lastName}},\n\nWe hope this message finds you well!\n\nWe wanted to share something important with you about BAGGA BUGS - our new email solution. It's designed to be powerful and easy to use.\n\nLearn more on our website.\n\nBest regards,\n{{teamLeadName}}",
@@ -30,18 +15,78 @@
     }
   },
   {
-    "id": "1755313829739",
-    "contactId": "3",
-    "contactEmail": "shellabyair123@gmail.com",
-    "contactName": "d g",
-    "subject": "Hello d, Important Message for you",
-    "sentAt": "2025-08-16T03:10:29.737Z",
-    "openedAt": "2025-08-16T03:10:54.935Z",
-    "status": "Opened",
+    "id": "email_1755473658967_87ktoe25b",
+    "contactId": "1",
+    "contactEmail": "firehousesubmenu@gmail.com",
+    "contactName": "Firehouse Subs",
+    "subject": "Hello Firehouse, Important Message for you",
+    "sentAt": "2025-08-17T23:34:15.791Z",
+    "openedAt": null,
+    "status": "Sent",
     "campaignData": {
       "subject": "Hello {{firstName}}, Important Message for you",
       "body": "Dear {{firstName}} {{lastName}},\n\nWe hope this message finds you well!\n\nWe wanted to share something important with you about BAGGA BUGS - our new email solution. It's designed to be powerful and easy to use.\n\nLearn more on our website.\n\nBest regards,\n{{teamLeadName}}",
       "senderName": "Arham Awan"
     }
+  },
+  {
+    "id": "email_1755472267628_agnb39jix",
+    "contactId": "2",
+    "contactEmail": "firehousesubmenu@gmail.com",
+    "contactName": "Firehouse Subs",
+    "subject": "Hello Firehouse, Important Message for you",
+    "sentAt": "2025-08-17T23:11:04.856Z",
+    "openedAt": null,
+    "status": "Sent",
+    "campaignData": {
+      "subject": "Hello {{firstName}}, Important Message for you",
+      "body": "Dear {{firstName}} {{lastName}},\n\nWe hope this message finds you well!\n\nWe wanted to share something important with you about BAGGA BUGS - our new email solution. It's designed to be powerful and easy to use.\n\nLearn more on our website.\n\nBest regards,\n{{teamLeadName}}",
+      "senderName": "Arham Awan"
+    }
+  },
+  {
+    "id": "email_1755471839446_rnag28ioc",
+    "contactId": "1",
+    "contactEmail": "teraboapk@gmail.com",
+    "contactName": "fff ff",
+    "subject": "Hello fff, Important Message for you",
+    "sentAt": "2025-08-17T23:03:56.079Z",
+    "openedAt": null,
+    "status": "Sent",
+    "campaignData": {
+      "subject": "Hello {{firstName}}, Important Message for you",
+      "body": "Dear {{firstName}} {{lastName}},\n\nWe hope this message finds you well!\n\nWe wanted to share something important with you about BAGGA BUGS - our new email solution. It's designed to be powerful and easy to use.\n\nLearn more on our website.\n\nBest regards,\n{{teamLeadName}}",
+      "senderName": "Arham Awan"
+    }
+  },
+  {
+    "id": "email_1755471041141_ouonexjq3",
+    "contactId": "1",
+    "contactEmail": "firehousesubmenu@gmail.com",
+    "contactName": "Firehouse Subs",
+    "subject": "Hello Firehouse, Important Message for you",
+    "sentAt": "2025-08-17T22:50:34.298Z",
+    "openedAt": null,
+    "status": "Sent",
+    "campaignData": {
+      "subject": "Hello {{firstName}}, Important Message for you",
+      "body": "Dear {{firstName}} {{lastName}},\n\nWe hope this message finds you well!\n\nWe wanted to share something important with you about BAGGA BUGS - our new email solution. It's designed to be powerful and easy to use.\n\nLearn more on our website.\n\nBest regards,\n{{teamLeadName}}",
+      "senderName": "Arham Awan"
+    }
+  },
+  {
+    "contactId": "2",
+    "contactEmail": "teraboapk@gmail.com",
+    "contactName": "Firehouse Subs",
+    "subject": "Hello Firehouse, Important Message for you",
+    "sentAt": "2025-08-17T23:37:28.960Z",
+    "openedAt": null,
+    "status": "Sent",
+    "campaignData": {
+      "subject": "Hello {{firstName}}, Important Message for you",
+      "body": "Dear {{firstName}} {{lastName}},\n\nWe hope this message finds you well!\n\nWe wanted to share something important with you about BAGGA BUGS - our new email solution. It's designed to be powerful and easy to use.\n\nLearn more on our website.\n\nBest regards,\n{{teamLeadName}}",
+      "senderName": "Arham Awan"
+    },
+    "id": "email_1755473853951_v0i1beq5s"
   }
 ]

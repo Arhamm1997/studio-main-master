@@ -1,1 +1,20 @@
-[]
+[
+  {
+    "id": "1",
+    "firstName": "Firehouse",
+    "lastName": "Subs",
+    "email": "firehousesubmenu@gmail.com",
+    "status": "Sent",
+    "sentTimestamp": "2025-08-17T23:34:15.791Z",
+    "openTimestamp": null
+  },
+  {
+    "id": "2",
+    "firstName": "Firehouse",
+    "lastName": "Subs",
+    "email": "teraboapk@gmail.com",
+    "status": "Sent",
+    "sentTimestamp": "2025-08-17T23:37:28.960Z",
+    "openTimestamp": null
+  }
+]
